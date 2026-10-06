@@ -14,6 +14,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=nonroot:nonroot /app/node_modules ./node_modules
 COPY --from=builder --chown=nonroot:nonroot /app/dist ./dist
+COPY --chown=nonroot:nonroot drizzle ./drizzle
 COPY --from=builder --chown=nonroot:nonroot /app/package.json ./
 USER nonroot
 EXPOSE 8080
