@@ -7,7 +7,7 @@ Environment variables, validated at startup. The service exits on an invalid val
 - `RABBITMQ_URL` (required): AMQP URL.
 - `RABBITMQ_QUEUE` (default `twake-mail-side-service`): the queue the service declares and reads.
 - `RABBITMQ_SPACE_EXCHANGE` (default `space`): the space events, read with `twake.space.#`.
-- `RABBITMQ_DNS_EXCHANGE` (default `admin-panel`) and `RABBITMQ_DNS_ROUTING_KEY` (default `dns.validated`): the admin panel's DNS validation event. Match the admin panel's `RABBITMQ_PUBLISHER_EXCHANGE` and `RABBITMQ_DNS_ROUTING_KEY`.
+- `RABBITMQ_DNS_EXCHANGE` (default `admin-panel`) and `RABBITMQ_DNS_ROUTING_KEY` (default `dns.validated`): the DNS validation event. The service provisions an organization's spaces when its `mailDnsConfigurationValidated` is true. Set these to where the admin panel publishes it.
 - `RABBITMQ_USER_DELETED_EXCHANGE` (default `b2b`) and `RABBITMQ_USER_DELETED_ROUTING_KEY` (default `domain.user.deleted`): user deletion.
 - `RABBITMQ_PREFETCH` (default 1), `RABBITMQ_MAX_RETRIES` (default 5, handler attempts before the dead letter queue), `RABBITMQ_RETRY_DELAY` in ms (default 1000).
 

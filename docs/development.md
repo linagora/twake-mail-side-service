@@ -13,14 +13,25 @@ src/
   config.ts           Environment parsing with zod
   consumers/index.ts  The queue, its bindings and its arguments
   consumers/router.ts Routing key to handler
-  db.ts               drizzle over postgres-js
+  spaces/events.ts    Event payload schemas
+  spaces/service.ts   Provisioning and membership
+  mailbox/address.ts  Team mailbox name from the space name
+  clients/tmail.ts    TMail webadmin client
+  activity.ts         Events published on the activity exchange
+  db.ts               drizzle over postgres-js, migrations at startup
+  schema.ts           Database tables
   health.ts           /healthz, /readyz, /metrics
   metrics.ts          prom-client registry
   logger.ts           pino
+drizzle/              Generated migrations
 tests/
   unit/               No Docker
-  integration/        testcontainers: RabbitMQ
+  integration/        testcontainers: RabbitMQ and PostgreSQL
 ```
+
+## Database changes
+
+Edit `src/schema.ts`, then generate the migration with `npm run db:generate` and commit it with the change.
 
 ## Checks
 

@@ -2,7 +2,7 @@
   "name": "twake-mail-side-service",
   "version": "0.1.0",
   "private": true,
-  "description": "Gives each TwakeSpace space a TMail team mailbox and publishes its mail activity to the space feed",
+  "description": "Gives each TwakeSpace space a TMail team mailbox and keeps its members in step with the space",
   "type": "module",
   "engines": {
     "node": ">=20"

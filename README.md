@@ -1,6 +1,6 @@
 # twake-mail-side-service
 
-Gives each TwakeSpace space a TMail team mailbox, and publishes the mailbox's activity to the space feed. The design is in ADR 005 (Mail side service) and ADR 006 (activity events) of the TwakeSpace architecture.
+Gives each TwakeSpace space a TMail team mailbox and keeps its members in step with the space.
 
 ## Quick start
 
