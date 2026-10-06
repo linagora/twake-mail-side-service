@@ -63,6 +63,25 @@ describe('createTmailClient', () => {
     expect(requests[0]).toMatchObject({ method: 'GET', url: '/domains/acme.com/team-mailboxes' });
   });
 
+  it("finds the id of a team mailbox's root, not of its folders", async () => {
+    reply = {
+      status: 200,
+      body: '[{"mailboxName":"INBOX","mailboxId":"inbox-id"},{"mailboxName":"sales","mailboxId":"root-id"},{"mailboxName":"sales-eu","mailboxId":"other-id"}]',
+    };
+
+    await expect(client().rootMailboxId('acme.com', 'sales')).resolves.toBe('root-id');
+    expect(requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/domains/acme.com/team-mailboxes/sales/mailboxes',
+    });
+  });
+
+  it('fails when the root is not listed', async () => {
+    reply = { status: 200, body: '[{"mailboxName":"INBOX","mailboxId":"inbox-id"}]' };
+
+    await expect(client().rootMailboxId('acme.com', 'sales')).rejects.toThrow('sales@acme.com');
+  });
+
   it('adds a member with a role', async () => {
     await client().addMember('acme.com', 'sales', 'jane@acme.com', 'manager');
 

@@ -12,6 +12,7 @@ export const spaces = pgTable('spaces', {
   organizationId: text('organization_id').notNull(),
   name: text('name').notNull(),
   address: text('address').unique(),
+  mailboxId: text('mailbox_id').unique(),
   provisionedAt: timestamp('provisioned_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

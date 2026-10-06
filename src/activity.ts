@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { RabbitMQClient } from '@linagora/rabbitmq-client';
 
 export interface ActivityPublisher {
-  provisioned(mailbox: { organizationId: string; spaceId: string; address: string }): Promise<void>;
+  provisioned(mailbox: {
+    organizationId: string;
+    spaceId: string;
+    mailboxId: string;
+  }): Promise<void>;
 }
 
 interface ActivityDeps {
@@ -27,10 +31,11 @@ export const createActivityPublisher = ({ client, exchange }: ActivityDeps): Act
   };
 
   return {
-    provisioned: ({ organizationId, spaceId, address }) =>
+    // The Mail embed opens a team mailbox by its root JMAP mailbox id, so that is the resource id.
+    provisioned: ({ organizationId, spaceId, mailboxId }) =>
       publish('com.twake.mail.space.provisioned.v1', organizationId, {
         space_id: spaceId,
-        resource: { kind: 'mailbox', id: address },
+        resource: { kind: 'mailbox', id: mailboxId },
       }),
   };
 };

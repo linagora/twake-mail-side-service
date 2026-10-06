@@ -3,6 +3,7 @@ export type TeamMailboxRole = 'manager' | 'member';
 export interface TmailClient {
   listTeamMailboxes(domain: string): Promise<string[]>;
   createTeamMailbox(domain: string, name: string): Promise<void>;
+  rootMailboxId(domain: string, name: string): Promise<string>;
   addMember(domain: string, name: string, user: string, role: TeamMailboxRole): Promise<void>;
   removeMember(domain: string, name: string, user: string): Promise<void>;
 }
@@ -59,6 +60,14 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
         }
         throw err;
       }
+    },
+    // The root is listed under the team name itself, its folders (INBOX, Sent...) under theirs.
+    async rootMailboxId(domain, name) {
+      const res = await call('GET', `${teamMailbox(domain, name)}/mailboxes`);
+      const folders = (await res.json()) as { mailboxName: string; mailboxId: string }[];
+      const root = folders.find((f) => f.mailboxName === name);
+      if (!root) throw new Error(`no root mailbox listed for ${name}@${domain}`);
+      return root.mailboxId;
     },
     async addMember(domain, name, user, role) {
       await call('PUT', `${member(domain, name, user)}?role=${role}`);

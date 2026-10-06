@@ -29,7 +29,7 @@ flowchart LR
 - The address comes from the space name: accents dropped, lowercased, any character other than a letter, a digit, `-` or `_` replaced by `-`, at most 64 characters. When another space or a TMail team mailbox, user or alias holds it, `-2`, `-3` and so on are added. Renaming the space keeps the address.
 - The address is stored before the mailbox is created in TMail, so a retry resumes with the same one.
 - Admins are managers and editors are members. Viewers get no access, since TMail team mailboxes have no read-only access.
-- Once the members are added, the service publishes `com.twake.mail.space.provisioned.v1` with the space id and the team address as the mailbox id.
+- Once the members are added, the service reads the id of the team mailbox's root mailbox and publishes `com.twake.mail.space.provisioned.v1` with the space id and that id as the mailbox id. It is the JMAP mailbox id the Twake Mail embed opens.
 - A deleted user is removed from every team mailbox they were in.
 - A malformed event goes straight to the dead letter queue.
 
@@ -43,6 +43,7 @@ sequenceDiagram
   R->>M: DNS event, mail validated
   M->>M: store the domain, pick the address
   M->>T: PUT team mailbox, PUT each manager and member
+  M->>T: GET its mailboxes, keep the root's id
   M->>R: activity, com.twake.mail.space.provisioned.v1
 ```
 
