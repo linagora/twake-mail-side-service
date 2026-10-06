@@ -26,7 +26,7 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 The user in `RABBITMQ_URL` needs:
 
 - `read` on the four source exchanges. They must exist before the service starts, so TMail with its plugin is deployed first.
-- `write` on the `space` exchange, to request a sync of every organization when its database holds no space yet.
+- `configure` and `write` on the `space` exchange, to request a sync of every organization when its database holds no space yet. The client declares the exchange on its first publish, which takes `configure` even though it already exists.
 - `configure`, `write` and `read` on the `twake-mail-side-service` queue, its `.dlq` twin and the `twake-mail-side-service.dlx` exchange, which the service declares.
 - `configure` and `write` on the `activity` exchange, which the service declares (topic, durable) on its first publish.
 
