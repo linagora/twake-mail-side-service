@@ -10,6 +10,8 @@ import { createMailService } from './mail/service.js';
 import { createMetrics } from './metrics.js';
 import { createSpaceService } from './spaces/service.js';
 
+const PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
 const main = async (): Promise<void> => {
   const config = loadConfig();
   logger.level = config.LOG_LEVEL;
@@ -44,6 +46,8 @@ const main = async (): Promise<void> => {
   const route = createRouter({
     handlers: {
       'twake.space.created': spaces.spaceCreated,
+      'twake.space.updated': spaces.spaceRenamed,
+      'twake.space.deleted': spaces.spaceDeleted,
       'twake.space.member.added': spaces.memberAdded,
       'twake.space.member.removed': spaces.memberRemoved,
       'twake.space.member.role.changed': spaces.memberRoleChanged,
@@ -68,6 +72,13 @@ const main = async (): Promise<void> => {
     process.exit(1);
   }
 
+  // Each run deletes only what is due, so replicas running it at the same time are harmless.
+  const purge = () =>
+    spaces.purgeDeleted().catch((err) => logger.error({ err }, 'purge of deleted spaces failed'));
+  void purge();
+  const purger = setInterval(() => void purge(), PURGE_INTERVAL_MS);
+  purger.unref();
+
   let shuttingDown = false;
   const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
     if (shuttingDown) return;
@@ -80,6 +91,7 @@ const main = async (): Promise<void> => {
     }, config.SHUTDOWN_TIMEOUT_MS);
     timer.unref();
 
+    clearInterval(purger);
     try {
       await consumer.stop();
       await db.close();

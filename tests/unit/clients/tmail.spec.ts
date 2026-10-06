@@ -106,6 +106,39 @@ describe('createTmailClient', () => {
     });
   });
 
+  it("lists a team mailbox's members", async () => {
+    reply = {
+      status: 200,
+      body: '[{"username":"jane@acme.com","role":"manager"},{"username":"bob@acme.com","role":"member"}]',
+    };
+
+    await expect(client().listMembers('acme.com', 'sales')).resolves.toEqual([
+      'jane@acme.com',
+      'bob@acme.com',
+    ]);
+    expect(requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/domains/acme.com/team-mailboxes/sales/members',
+    });
+  });
+
+  it('lists no members for a team mailbox TMail does not have', async () => {
+    reply = { status: 404, body: '{"message":"not found"}' };
+
+    await expect(client().listMembers('acme.com', 'sales')).resolves.toEqual([]);
+  });
+
+  it('deletes a team mailbox, already gone with its domain or not', async () => {
+    await client().deleteTeamMailbox('acme.com', 'sales');
+    reply = { status: 404, body: '{"message":"domain not found"}' };
+    await client().deleteTeamMailbox('acme.com', 'sales');
+
+    expect(requests[0]).toMatchObject({
+      method: 'DELETE',
+      url: '/domains/acme.com/team-mailboxes/sales',
+    });
+  });
+
   it('throws with the status and body on any other failure', async () => {
     reply = { status: 500, body: 'boom' };
 

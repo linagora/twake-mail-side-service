@@ -31,10 +31,14 @@ export const createMailService = ({ db, activity, logger }: MailServiceDeps): Ma
   async messageAdded(body) {
     const event = parseEvent(teamMessage, body);
     const [space] = await db
-      .select({ organizationId: spaces.organizationId, mailboxId: spaces.mailboxId })
+      .select({
+        organizationId: spaces.organizationId,
+        mailboxId: spaces.mailboxId,
+        deletedAt: spaces.deletedAt,
+      })
       .from(spaces)
       .where(eq(spaces.address, event.teamMailbox.toLowerCase()));
-    if (!space) {
+    if (!space || space.deletedAt) {
       logger.info({ teamMailbox: event.teamMailbox }, 'mail of a team mailbox no space owns');
       return;
     }
