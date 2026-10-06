@@ -13,7 +13,6 @@ describe('loadConfig', () => {
     expect(cfg.RABBITMQ_SPACE_EXCHANGE).toBe('space');
     expect(cfg.RABBITMQ_ADMIN_PANEL_EXCHANGE).toBe('admin-panel');
     expect(cfg.RABBITMQ_B2B_EXCHANGE).toBe('b2b');
-    expect(cfg.RABBITMQ_DELIVERY_LIMIT).toBe(20);
     expect(cfg.LOG_LEVEL).toBe('info');
     expect(cfg.HEALTH_PORT).toBe(8080);
   });

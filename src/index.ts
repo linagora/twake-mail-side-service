@@ -27,7 +27,7 @@ const main = async (): Promise<void> => {
   }
 
   let shuttingDown = false;
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'shutdown signal received');
@@ -43,7 +43,7 @@ const main = async (): Promise<void> => {
       await db.close();
       await health.stop();
       logger.info('shutdown complete');
-      process.exit(0);
+      process.exit(exitCode);
     } catch (err) {
       logger.error({ err }, 'error during shutdown');
       process.exit(1);
@@ -54,11 +54,11 @@ const main = async (): Promise<void> => {
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('uncaughtException', (err) => {
     logger.fatal({ err }, 'uncaught exception');
-    void shutdown('uncaughtException');
+    void shutdown('uncaughtException', 1);
   });
   process.on('unhandledRejection', (reason) => {
     logger.fatal({ reason }, 'unhandled rejection');
-    void shutdown('unhandledRejection');
+    void shutdown('unhandledRejection', 1);
   });
 };
 

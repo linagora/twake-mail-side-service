@@ -64,7 +64,13 @@ export const createHealthServer = ({
         }
       });
 
-      await new Promise<void>((resolve) => server!.listen(port, resolve));
+      await new Promise<void>((resolve, reject) => {
+        server!.once('error', reject);
+        server!.listen(port, () => {
+          server!.off('error', reject);
+          resolve();
+        });
+      });
       const bound = (server.address() as AddressInfo).port;
       logger.info({ port: bound }, 'health server listening');
       return bound;

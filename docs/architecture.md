@@ -24,5 +24,5 @@ flowchart LR
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- A failing handler is retried in process `RABBITMQ_MAX_RETRIES` times, then the message goes to the dead letter queue `twake-mail-side-service.dlq`.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.

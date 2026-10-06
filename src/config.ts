@@ -11,7 +11,6 @@ const envSchema = z.object({
   RABBITMQ_PREFETCH: positiveInt.default(1),
   RABBITMQ_MAX_RETRIES: positiveInt.default(5),
   RABBITMQ_RETRY_DELAY: positiveInt.default(1000),
-  RABBITMQ_DELIVERY_LIMIT: positiveInt.default(20),
 
   DATABASE_URL: z.string().min(1),
 

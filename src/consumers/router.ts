@@ -33,7 +33,6 @@ export const createRouter = ({ handlers, logger, metrics }: RouterDeps): RabbitM
       metrics.observe(event, 'handled', Date.now() - started);
     } catch (err) {
       metrics.observe(event, 'failed', Date.now() - started);
-      logger.warn({ err, event, messageId: properties.messageId }, 'handler failed');
       throw err;
     }
   };

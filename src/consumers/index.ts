@@ -21,8 +21,14 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
     maxRetries: config.RABBITMQ_MAX_RETRIES,
     retryDelay: config.RABBITMQ_RETRY_DELAY,
     prefetch: config.RABBITMQ_PREFETCH,
-    closeTimeout: config.SHUTDOWN_TIMEOUT_MS,
+    // Half the budget, so closing the connection and the database still fits before the forced exit.
+    closeTimeout: Math.floor(config.SHUTDOWN_TIMEOUT_MS / 2),
     logger,
+    hooks: {
+      onReconnect: ({ subscriptionsFailed }) => {
+        subscribed = subscriptionsFailed === 0;
+      },
+    },
   });
 
   return {
@@ -42,9 +48,10 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
           deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
           passiveExchanges: true,
           // Single active consumer keeps one replica reading, so events stay in publish order.
+          // Both are fixed: RabbitMQ refuses to redeclare a queue with different arguments.
           queueArguments: {
             'x-single-active-consumer': true,
-            'x-delivery-limit': config.RABBITMQ_DELIVERY_LIMIT,
+            'x-delivery-limit': 20,
           },
           concurrency: 1,
         },
