@@ -16,8 +16,8 @@ export interface DbClient {
 
 const MIGRATIONS = fileURLToPath(new URL('../drizzle', import.meta.url));
 
-export const createDbClient = (databaseUrl: string, poolSize = 5): DbClient => {
-  const client = postgres(databaseUrl, { max: poolSize, onnotice: () => {} });
+export const createDbClient = (databaseUrl: string): DbClient => {
+  const client = postgres(databaseUrl, { max: 5, onnotice: () => {} });
   const db = drizzle(client, { schema });
 
   return {

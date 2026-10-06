@@ -5,7 +5,6 @@ export type Outcome = 'handled' | 'ignored' | 'failed';
 export interface Metrics {
   registry: Registry;
   messagesProcessed: Counter<'event' | 'outcome'>;
-  messageLatency: Histogram<'event' | 'outcome'>;
   observe(event: string, outcome: Outcome, latencyMs: number): void;
 }
 
@@ -31,7 +30,6 @@ export const createMetrics = (): Metrics => {
   return {
     registry,
     messagesProcessed,
-    messageLatency,
     observe(event, outcome, latencyMs) {
       messagesProcessed.labels(event, outcome).inc();
       messageLatency.labels(event, outcome).observe(latencyMs / 1000);

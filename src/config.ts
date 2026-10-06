@@ -30,10 +30,7 @@ export type Config = z.infer<typeof envSchema>;
 export const loadConfig = (env: Record<string, string | undefined> = process.env): Config => {
   const result = envSchema.safeParse(env);
   if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-      .join('; ');
-    throw new Error(`Invalid configuration: ${issues}`);
+    throw new Error(`Invalid configuration:\n${z.prettifyError(result.error)}`);
   }
   return result.data;
 };
