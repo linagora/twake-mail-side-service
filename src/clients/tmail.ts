@@ -3,7 +3,9 @@ export type TeamMailboxRole = 'manager' | 'member';
 export interface TmailClient {
   listTeamMailboxes(domain: string): Promise<string[]>;
   createTeamMailbox(domain: string, name: string): Promise<void>;
+  deleteTeamMailbox(domain: string, name: string): Promise<void>;
   rootMailboxId(domain: string, name: string): Promise<string>;
+  listMembers(domain: string, name: string): Promise<string[]>;
   addMember(domain: string, name: string, user: string, role: TeamMailboxRole): Promise<void>;
   removeMember(domain: string, name: string, user: string): Promise<void>;
 }
@@ -27,6 +29,8 @@ export class TmailError extends Error {
 }
 
 export class AddressTakenError extends TmailError {}
+
+const isNotFound = (err: unknown) => err instanceof TmailError && err.status === 404;
 
 export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailClient => {
   const root = baseUrl.replace(/\/+$/, '');
@@ -61,6 +65,14 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
         throw err;
       }
     },
+    // 404 means the domain is gone, and its team mailboxes with it.
+    async deleteTeamMailbox(domain, name) {
+      try {
+        await call('DELETE', teamMailbox(domain, name));
+      } catch (err) {
+        if (!isNotFound(err)) throw err;
+      }
+    },
     // The root is listed under the team name itself, its folders (INBOX, Sent...) under theirs.
     async rootMailboxId(domain, name) {
       const res = await call('GET', `${teamMailbox(domain, name)}/mailboxes`);
@@ -70,6 +82,15 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
         throw new Error(`no root mailbox listed for ${name}@${domain}`);
       }
       return root.mailboxId;
+    },
+    async listMembers(domain, name) {
+      try {
+        const res = await call('GET', `${teamMailbox(domain, name)}/members`);
+        return ((await res.json()) as { username: string }[]).map((m) => m.username);
+      } catch (err) {
+        if (isNotFound(err)) return [];
+        throw err;
+      }
     },
     async addMember(domain, name, user, role) {
       await call('PUT', `${member(domain, name, user)}?role=${role}`);

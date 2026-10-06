@@ -24,6 +24,15 @@ export const spaceCreated = z.looseObject({
   members: z.array(member).default([]),
 });
 
+export const spaceRenamed = z.looseObject({
+  id: z.uuid(),
+  name: z.string(),
+});
+
+export const spaceDeleted = z.looseObject({
+  id: z.uuid(),
+});
+
 export const memberChanged = z.looseObject({
   organizationId: z.string().min(1),
   id: z.uuid(),

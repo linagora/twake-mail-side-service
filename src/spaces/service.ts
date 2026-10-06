@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { ActivityPublisher } from '../activity.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../clients/tmail.js';
 import type { Db } from '../db.js';
@@ -10,12 +10,17 @@ import {
   memberChanged,
   parseEvent,
   spaceCreated,
+  spaceDeleted,
+  spaceRenamed,
   userDeleted,
   type SpaceRole,
 } from './events.js';
 
 export interface SpaceService {
   spaceCreated(body: unknown): Promise<void>;
+  spaceRenamed(body: unknown): Promise<void>;
+  spaceDeleted(body: unknown): Promise<void>;
+  purgeDeleted(now?: Date): Promise<void>;
   memberAdded(body: unknown): Promise<void>;
   memberRoleChanged(body: unknown): Promise<void>;
   memberRemoved(body: unknown): Promise<void>;
@@ -36,6 +41,8 @@ const TMAIL_ROLES: Record<SpaceRole, TeamMailboxRole | undefined> = {
   editor: 'member',
   viewer: undefined,
 };
+
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -87,7 +94,7 @@ export const createSpaceService = ({
 
   const provision = async (spaceId: string): Promise<void> => {
     const space = await findSpace(spaceId);
-    if (!space || space.provisionedAt) return;
+    if (!space || space.provisionedAt || space.deletedAt) return;
     const [organization] = await db
       .select()
       .from(organizations)
@@ -136,8 +143,8 @@ export const createSpaceService = ({
   const onMember = (removed: boolean) => async (body: unknown) => {
     const event = parseEvent(memberChanged, body);
     const space = await findSpace(event.id);
-    if (!space) {
-      logger.warn({ spaceId: event.id }, 'member event for an unknown space, ignored');
+    if (!space || space.deletedAt) {
+      logger.warn({ spaceId: event.id }, 'member event for an unknown or deleted space, ignored');
       return;
     }
     for (const member of event.members) {
@@ -188,6 +195,55 @@ export const createSpaceService = ({
         }
       });
       await provision(event.id);
+    },
+
+    // The address is picked at provisioning, so a rename only matters to a space still waiting.
+    async spaceRenamed(body) {
+      const event = parseEvent(spaceRenamed, body);
+      await db.update(spaces).set({ name: event.name }).where(eq(spaces.spaceId, event.id));
+    },
+
+    async spaceDeleted(body) {
+      const event = parseEvent(spaceDeleted, body);
+      const space = await findSpace(event.id);
+      if (!space || space.deletedAt) return;
+      if (!space.address) {
+        await db.delete(spaces).where(eq(spaces.spaceId, event.id));
+        return;
+      }
+      const { name, domain } = splitAddress(space.address);
+      // TMail first: a failed call retries the event with the space still live.
+      for (const user of await tmail.listMembers(domain, name)) {
+        await tmail.removeMember(domain, name, user);
+      }
+      // The row stays until the purge, so the address is not given to another space meanwhile.
+      await db.transaction(async (tx) => {
+        await tx.delete(spaceMembers).where(eq(spaceMembers.spaceId, event.id));
+        await tx
+          .update(spaces)
+          .set({ deletedAt: sql`now()` })
+          .where(eq(spaces.spaceId, event.id));
+      });
+      logger.info({ spaceId: event.id, address: space.address }, 'team mailbox closed');
+    },
+
+    async purgeDeleted(now = new Date()) {
+      const due = await db
+        .select({ spaceId: spaces.spaceId, address: spaces.address })
+        .from(spaces)
+        .where(lt(spaces.deletedAt, new Date(now.getTime() - RETENTION_MS)));
+      for (const { spaceId, address } of due) {
+        try {
+          if (address) {
+            const { name, domain } = splitAddress(address);
+            await tmail.deleteTeamMailbox(domain, name);
+          }
+          await db.delete(spaces).where(eq(spaces.spaceId, spaceId));
+          logger.info({ spaceId, address }, 'team mailbox deleted');
+        } catch (err) {
+          logger.error({ err, spaceId }, 'team mailbox deletion failed, retried at the next purge');
+        }
+      }
     },
 
     memberAdded: onMember(false),

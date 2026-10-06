@@ -91,6 +91,14 @@ describe('mail service', () => {
     expect(activity.message).not.toHaveBeenCalled();
   });
 
+  it('ignores the mail of a deleted space', async () => {
+    await client.db.update(spaces).set({ deletedAt: new Date() });
+
+    await service().messageAdded(received());
+
+    expect(activity.message).not.toHaveBeenCalled();
+  });
+
   it('retries the mail of a space still being provisioned', async () => {
     await expect(service().messageAdded(received('waiting@acme.com'))).rejects.toThrow(
       'waiting@acme.com',

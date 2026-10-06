@@ -73,7 +73,9 @@ beforeEach(async () => {
   tmail = {
     listTeamMailboxes: vi.fn().mockResolvedValue([]),
     createTeamMailbox: vi.fn().mockResolvedValue(undefined),
+    deleteTeamMailbox: vi.fn().mockResolvedValue(undefined),
     rootMailboxId: vi.fn(async (_domain: string, name: string) => `id-${name}`),
+    listMembers: vi.fn().mockResolvedValue(['jane@acme.com', 'bob@acme.com']),
     addMember: vi.fn().mockResolvedValue(undefined),
     removeMember: vi.fn().mockResolvedValue(undefined),
   };
@@ -245,6 +247,95 @@ describe('space service', () => {
     await service().userDeleted(deleted);
 
     expect(tmail.removeMember).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives a waiting space the address of its new name', async () => {
+    await service().spaceCreated(created());
+    await service().spaceRenamed({ organizationId: 'acme', id: SPACE, name: 'Sales World' });
+    await service().dnsValidated(validated());
+
+    expect(tmail.createTeamMailbox).toHaveBeenCalledWith('acme.com', 'sales-world');
+  });
+
+  it('keeps the address of a provisioned space it renames', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    await service().spaceRenamed({ organizationId: 'acme', id: SPACE, name: 'Sales World' });
+
+    const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
+    expect(stored).toMatchObject({ name: 'Sales World', address: 'sales-eu@acme.com' });
+  });
+
+  it('removes every member of a deleted space, then deletes its mailbox 30 days later', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    const deleted = { organizationId: 'acme', id: SPACE };
+
+    await service().spaceDeleted(deleted);
+    await service().spaceDeleted(deleted);
+    await service().memberAdded(memberEvent(BOB, 'bob@acme.com', 'editor'));
+
+    expect(tmail.removeMember.mock.calls).toEqual([
+      ['acme.com', 'sales-eu', 'jane@acme.com'],
+      ['acme.com', 'sales-eu', 'bob@acme.com'],
+    ]);
+    expect(tmail.addMember).toHaveBeenCalledTimes(2);
+
+    const day = 24 * 60 * 60 * 1000;
+    await service().purgeDeleted(new Date(Date.now() + 29 * day));
+    expect(tmail.deleteTeamMailbox).not.toHaveBeenCalled();
+
+    await service().purgeDeleted(new Date(Date.now() + 31 * day));
+    expect(tmail.deleteTeamMailbox).toHaveBeenCalledWith('acme.com', 'sales-eu');
+    expect(await client.db.select().from(spaces)).toEqual([]);
+  });
+
+  it('holds the address of a deleted space until its mailbox is deleted', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    await service().spaceDeleted({ organizationId: 'acme', id: SPACE });
+
+    await service().spaceCreated(created(OTHER_SPACE));
+
+    expect(activity.provisioned).toHaveBeenLastCalledWith(
+      expect.objectContaining({ spaceId: OTHER_SPACE, mailboxId: 'id-sales-eu-2' }),
+    );
+  });
+
+  it('retries a space deletion that TMail failed', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    tmail.removeMember.mockRejectedValueOnce(new Error('tmail down'));
+    const deleted = { organizationId: 'acme', id: SPACE };
+
+    await expect(service().spaceDeleted(deleted)).rejects.toThrow('tmail down');
+    await service().spaceDeleted(deleted);
+
+    expect(tmail.removeMember).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a mailbox TMail failed to delete for the next purge', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    await service().spaceDeleted({ organizationId: 'acme', id: SPACE });
+    tmail.deleteTeamMailbox.mockRejectedValueOnce(new Error('tmail down'));
+    const later = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+
+    await service().purgeDeleted(later);
+    expect(await client.db.select().from(spaces)).toHaveLength(1);
+
+    await service().purgeDeleted(later);
+    expect(await client.db.select().from(spaces)).toEqual([]);
+  });
+
+  it('forgets a deleted space that never got a mailbox', async () => {
+    await service().spaceCreated(created());
+    await service().spaceDeleted({ organizationId: 'acme', id: SPACE });
+    await service().dnsValidated(validated());
+
+    expect(tmail.listMembers).not.toHaveBeenCalled();
+    expect(tmail.createTeamMailbox).not.toHaveBeenCalled();
+    expect(await client.db.select().from(spaces)).toEqual([]);
   });
 
   it('ignores member events of a space it does not know', async () => {
