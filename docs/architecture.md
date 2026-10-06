@@ -6,7 +6,7 @@ The service gives each TwakeSpace space a TMail team mailbox. It follows the spa
 
 The service reads one quorum queue, bound to four exchanges. The names below are the defaults; [operations](operations.md) lists the settings.
 
-- `space`, routing key `twake.space.#`: published by ldap-rest. The service handles `twake.space.created`, `twake.space.updated` (a rename), `twake.space.deleted` and the member events (added, removed, role changed).
+- `space`, routing key `twake.space.#`: published by ldap-rest. The service handles `twake.space.created`, `twake.space.updated` (a rename), `twake.space.deleted`, the member events (added, removed, role changed), `twake.space.synced` and `twake.space.sync.completed`.
 - `admin-panel`, routing key `dns.validated`: an organization's mail domain passed DNS validation. Published by the admin panel.
 - `b2b`, routing key `domain.user.deleted`: a user was deleted. ldap-rest publishes no space member event for a deleted user.
 - `tmail`, routing keys `team-mailbox.message.received` and `team-mailbox.message.sent`: a message was delivered to a team mailbox, or filed in its Sent folder. Published by the team mailbox events plugin of TMail.
@@ -57,6 +57,15 @@ sequenceDiagram
 - A space deleted before it got a mailbox is simply forgotten.
 - Member events and mail of a deleted space are ignored.
 
+## Sync
+
+ldap-rest publishes a snapshot of every space each night, and on request. It repairs what an event lost or a dead letter left behind.
+
+- On `twake.space.synced`, the service makes the team mailbox match the space: its members and roles, read from TMail, so a member added there by hand is removed too. A space it never heard of is stored and provisioned like a created one.
+- On `twake.space.sync.completed`, the service closes, as on a deletion, the spaces of the organization the snapshot no longer lists. A space whose last event is newer than the snapshot stays.
+- The service keeps the timestamp of the last event it applied to each space and ignores an older one, so a late or redelivered event never undoes a newer change.
+- On a start with no space stored, the service requests a sync of every organization, which provisions the spaces created before it was deployed.
+
 ## Mail activity
 
 - For each plugin event, the service finds the space by its team address and publishes `com.twake.mail.message.received.v1` or `com.twake.mail.message.sent.v1` on the activity exchange.
@@ -68,6 +77,6 @@ sequenceDiagram
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones; the next sync repairs the space.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.
 - After a RabbitMQ reconnect that fails to restore the subscription, the process exits with code 1 so that it is restarted.

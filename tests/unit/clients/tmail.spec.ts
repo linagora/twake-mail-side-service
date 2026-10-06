@@ -113,8 +113,8 @@ describe('createTmailClient', () => {
     };
 
     await expect(client().listMembers('acme.com', 'sales')).resolves.toEqual([
-      'jane@acme.com',
-      'bob@acme.com',
+      { username: 'jane@acme.com', role: 'manager' },
+      { username: 'bob@acme.com', role: 'member' },
     ]);
     expect(requests[0]).toMatchObject({
       method: 'GET',
