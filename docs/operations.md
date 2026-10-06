@@ -18,7 +18,6 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 - `DATABASE_URL` (required): PostgreSQL URL. The service applies its migrations at startup.
 - `TMAIL_WEBADMIN_URL` (required): TMail's webadmin, for example `http://tmail-admin.tmail.svc.cluster.local:8000`.
 - `TMAIL_WEBADMIN_PASSWORD` (optional): sent as the `Password` header when webadmin asks for one.
-- `TMAIL_WEB_URL` (required): Twake Mail web, for example `https://mail.example.com`. The feed links each mail to `<TMAIL_WEB_URL>/dashboard/<message id>?type=normal`.
 - `LOG_LEVEL` (default `info`), `HEALTH_PORT` (default 8080), `SHUTDOWN_TIMEOUT_MS` (default 10000).
 
 ## RabbitMQ permissions
