@@ -1,5 +1,5 @@
 {
-  "id": "dca1bb96-b34d-4c80-a2af-0e6fce096db4",
+  "id": "119f4eab-f3da-4d0b-8e5b-5204994f5d6e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -71,7 +71,23 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "space_members_user_id_index": {
+          "name": "space_members_user_id_index",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "space_members_space_id_spaces_space_id_fk": {
           "name": "space_members_space_id_spaces_space_id_fk",

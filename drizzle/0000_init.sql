@@ -23,4 +23,5 @@ CREATE TABLE "spaces" (
 	CONSTRAINT "spaces_address_unique" UNIQUE("address")
 );
 --> statement-breakpoint
-ALTER TABLE "space_members" ADD CONSTRAINT "space_members_space_id_spaces_space_id_fk" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("space_id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "space_members" ADD CONSTRAINT "space_members_space_id_spaces_space_id_fk" FOREIGN KEY ("space_id") REFERENCES "public"."spaces"("space_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "space_members_user_id_index" ON "space_members" USING btree ("user_id");

@@ -1,4 +1,4 @@
-import { boolean, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const organizations = pgTable('organizations', {
   organizationId: text('organization_id').primaryKey(),
@@ -26,5 +26,5 @@ export const spaceMembers = pgTable(
     email: text('email').notNull(),
     role: text('role', { enum: ['viewer', 'editor', 'admin'] }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.spaceId, t.userId] })],
+  (t) => [primaryKey({ columns: [t.spaceId, t.userId] }), index().on(t.userId)],
 );
