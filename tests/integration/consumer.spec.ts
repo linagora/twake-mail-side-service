@@ -23,7 +23,11 @@ describe('consumer', () => {
     }
 
     consumer = createConsumer({
-      config: loadConfig({ RABBITMQ_URL: url, DATABASE_URL: 'postgres://unused' }),
+      config: loadConfig({
+        RABBITMQ_URL: url,
+        DATABASE_URL: 'postgres://unused',
+        TMAIL_WEBADMIN_URL: 'http://unused',
+      }),
       logger,
       handler,
     });

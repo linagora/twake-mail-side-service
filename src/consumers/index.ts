@@ -6,6 +6,7 @@ export interface Consumer {
   start(): Promise<void>;
   stop(): Promise<void>;
   isReady(): boolean;
+  publisher: Pick<RabbitMQClient, 'publish'>;
 }
 
 export interface ConsumerDeps {
@@ -42,8 +43,14 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
         handler,
         {
           bindings: [
-            { exchange: config.RABBITMQ_ADMIN_PANEL_EXCHANGE, routingKey: 'dns.validated' },
-            { exchange: config.RABBITMQ_B2B_EXCHANGE, routingKey: 'domain.user.deleted' },
+            {
+              exchange: config.RABBITMQ_DNS_EXCHANGE,
+              routingKey: config.RABBITMQ_DNS_ROUTING_KEY,
+            },
+            {
+              exchange: config.RABBITMQ_USER_DELETED_EXCHANGE,
+              routingKey: config.RABBITMQ_USER_DELETED_ROUTING_KEY,
+            },
           ],
           deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
           passiveExchanges: true,
@@ -66,5 +73,6 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
     isReady() {
       return subscribed && client.isConnected();
     },
+    publisher: client,
   };
 };
