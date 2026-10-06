@@ -1,9 +1,10 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
 import type { ActivityPublisher } from '../../src/activity.js';
 import { AddressTakenError, type TmailClient } from '../../src/clients/tmail.js';
 import { createDbClient, type DbClient } from '../../src/db.js';
+import { spaces } from '../../src/schema.js';
 import { createSpaceService } from '../../src/spaces/service.js';
 import { silentLogger } from '../helpers.js';
 
@@ -72,6 +73,7 @@ beforeEach(async () => {
   tmail = {
     listTeamMailboxes: vi.fn().mockResolvedValue([]),
     createTeamMailbox: vi.fn().mockResolvedValue(undefined),
+    rootMailboxId: vi.fn(async (_domain: string, name: string) => `id-${name}`),
     addMember: vi.fn().mockResolvedValue(undefined),
     removeMember: vi.fn().mockResolvedValue(undefined),
   };
@@ -94,8 +96,10 @@ describe('space service', () => {
     expect(activity.provisioned).toHaveBeenCalledWith({
       organizationId: 'acme',
       spaceId: SPACE,
-      address: 'sales-eu@acme.com',
+      mailboxId: 'id-sales-eu',
     });
+    const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
+    expect(stored).toMatchObject({ address: 'sales-eu@acme.com', mailboxId: 'id-sales-eu' });
   });
 
   it('keeps a space waiting until its mail domain is validated', async () => {
@@ -134,7 +138,7 @@ describe('space service', () => {
     await service().spaceCreated(created());
 
     expect(activity.provisioned).toHaveBeenLastCalledWith(
-      expect.objectContaining({ spaceId: SPACE, address: 'sales-eu-4@acme.com' }),
+      expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu-4' }),
     );
   });
 
@@ -163,7 +167,7 @@ describe('space service', () => {
     await service().spaceCreated(created());
 
     expect(activity.provisioned).toHaveBeenCalledWith(
-      expect.objectContaining({ address: 'sales-eu-2@acme.com' }),
+      expect.objectContaining({ mailboxId: 'id-sales-eu-2' }),
     );
   });
 
@@ -178,7 +182,7 @@ describe('space service', () => {
 
     expect(activity.provisioned).toHaveBeenCalledOnce();
     expect(activity.provisioned).toHaveBeenCalledWith(
-      expect.objectContaining({ spaceId: OTHER_SPACE, address: 'support@acme.com' }),
+      expect.objectContaining({ spaceId: OTHER_SPACE, mailboxId: 'id-support' }),
     );
   });
 

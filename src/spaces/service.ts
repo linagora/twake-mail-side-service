@@ -116,12 +116,13 @@ export const createSpaceService = ({
       if (role) await tmail.addMember(domain, name, member.email, role);
     }
 
-    await activity.provisioned({ organizationId: space.organizationId, spaceId, address });
+    const mailboxId = await tmail.rootMailboxId(domain, name);
+    await activity.provisioned({ organizationId: space.organizationId, spaceId, mailboxId });
     await db
       .update(spaces)
-      .set({ provisionedAt: sql`now()` })
+      .set({ mailboxId, provisionedAt: sql`now()` })
       .where(eq(spaces.spaceId, spaceId));
-    logger.info({ spaceId, address }, 'team mailbox provisioned');
+    logger.info({ spaceId, address, mailboxId }, 'team mailbox provisioned');
   };
 
   const syncMember = async (address: string | null, email: string, role: SpaceRole | undefined) => {
