@@ -20,6 +20,10 @@ const main = async (): Promise<void> => {
     config,
     logger,
     handler: (message, properties) => route(message, properties),
+    onSubscriptionLost: () => {
+      logger.fatal('a reconnect left the queue unsubscribed');
+      void shutdown('subscriptionLost', 1);
+    },
   });
   const spaces = createSpaceService({
     db: db.db,

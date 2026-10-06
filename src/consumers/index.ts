@@ -13,9 +13,15 @@ export interface ConsumerDeps {
   config: Config;
   logger: Logger;
   handler: RabbitMQMessageHandler;
+  onSubscriptionLost?: () => void;
 }
 
-export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consumer => {
+export const createConsumer = ({
+  config,
+  logger,
+  handler,
+  onSubscriptionLost,
+}: ConsumerDeps): Consumer => {
   let subscribed = false;
   const client = new RabbitMQClient({
     url: config.RABBITMQ_URL,
@@ -26,8 +32,10 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
     closeTimeout: Math.floor(config.SHUTDOWN_TIMEOUT_MS / 2),
     logger,
     hooks: {
+      // The client never retries a failed resubscribe, so a restart is the way back.
       onReconnect: ({ subscriptionsFailed }) => {
         subscribed = subscriptionsFailed === 0;
+        if (!subscribed) onSubscriptionLost?.();
       },
     },
   });
