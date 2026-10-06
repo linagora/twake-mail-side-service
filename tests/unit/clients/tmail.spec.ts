@@ -82,6 +82,12 @@ describe('createTmailClient', () => {
     await expect(client().rootMailboxId('acme.com', 'sales')).rejects.toThrow('sales@acme.com');
   });
 
+  it('fails when the root is listed without an id', async () => {
+    reply = { status: 200, body: '[{"mailboxName":"sales"}]' };
+
+    await expect(client().rootMailboxId('acme.com', 'sales')).rejects.toThrow('sales@acme.com');
+  });
+
   it('adds a member with a role', async () => {
     await client().addMember('acme.com', 'sales', 'jane@acme.com', 'manager');
 

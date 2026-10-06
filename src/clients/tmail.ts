@@ -64,9 +64,11 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
     // The root is listed under the team name itself, its folders (INBOX, Sent...) under theirs.
     async rootMailboxId(domain, name) {
       const res = await call('GET', `${teamMailbox(domain, name)}/mailboxes`);
-      const folders = (await res.json()) as { mailboxName: string; mailboxId: string }[];
+      const folders = (await res.json()) as { mailboxName?: unknown; mailboxId?: unknown }[];
       const root = folders.find((f) => f.mailboxName === name);
-      if (!root) throw new Error(`no root mailbox listed for ${name}@${domain}`);
+      if (typeof root?.mailboxId !== 'string' || !root.mailboxId) {
+        throw new Error(`no root mailbox listed for ${name}@${domain}`);
+      }
       return root.mailboxId;
     },
     async addMember(domain, name, user, role) {
