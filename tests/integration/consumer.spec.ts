@@ -27,7 +27,6 @@ describe('consumer', () => {
         RABBITMQ_URL: url,
         DATABASE_URL: 'postgres://unused',
         TMAIL_WEBADMIN_URL: 'http://unused',
-        TMAIL_WEB_URL: 'http://unused',
       }),
       logger,
       handler,

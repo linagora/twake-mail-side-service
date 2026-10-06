@@ -22,7 +22,6 @@ const envSchema = z.object({
 
   TMAIL_WEBADMIN_URL: z.url(),
   TMAIL_WEBADMIN_PASSWORD: z.string().optional(),
-  TMAIL_WEB_URL: z.url(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   HEALTH_PORT: positiveInt.default(8080),

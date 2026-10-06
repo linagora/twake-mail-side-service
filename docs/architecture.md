@@ -69,7 +69,7 @@ ldap-rest publishes a snapshot of every space each night, and on request. It rep
 ## Mail activity
 
 - For each plugin event, the service finds the space by its team address and publishes `com.twake.mail.message.received.v1` or `com.twake.mail.message.sent.v1` on the activity exchange.
-- The event's object is the message: its id, its subject as the title (`(no subject)` when empty), and a link that opens it in Twake Mail web. Its container is the root mailbox id announced at provisioning.
+- The event's object is the message: its id, and its subject as the title (`(no subject)` when empty). Its container is the root mailbox id announced at provisioning. TwakeSpace builds the link that opens it from those ids.
 - The event id is the mailbox id, the message id and the direction, so a redelivered event is not shown twice.
 - The event names no actor and has no preview: the sender of a received mail is not a member, the plugin does not say which member sent a team mail, and viewers have no access to the mailbox.
 - Mail of a team mailbox that no space owns is acked and dropped. Mail of a space still being provisioned is retried, since its provisioned event has to come first.

@@ -7,7 +7,6 @@ describe('createActivityPublisher', () => {
     const activity = createActivityPublisher({
       client: { publish },
       exchange: 'activity',
-      mailWebUrl: 'https://mail.acme.com',
     });
 
     await activity.provisioned({
@@ -39,7 +38,6 @@ describe('createActivityPublisher', () => {
     const activity = createActivityPublisher({
       client: { publish },
       exchange: 'activity',
-      mailWebUrl: 'https://mail.acme.com/',
     });
 
     await activity.message({
@@ -66,7 +64,6 @@ describe('createActivityPublisher', () => {
           type: 'message',
           id: '956ee570-c1aa-11f1-bdf6-19e2a75a28cc',
           title: 'Quarterly numbers',
-          url: 'https://mail.acme.com/dashboard/956ee570-c1aa-11f1-bdf6-19e2a75a28cc?type=normal',
           container: { kind: 'mailbox', id: '847df6f0-c19d-11f1-9d3a-17ee7235c6d5' },
         },
       },
@@ -79,7 +76,6 @@ describe('createActivityPublisher', () => {
     const activity = createActivityPublisher({
       client: { publish },
       exchange: 'activity',
-      mailWebUrl: 'https://mail.acme.com',
     });
 
     await activity.message({

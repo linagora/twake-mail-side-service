@@ -22,18 +22,11 @@ export interface ActivityPublisher {
 interface ActivityDeps {
   client: Pick<RabbitMQClient, 'publish'>;
   exchange: string;
-  mailWebUrl: string;
 }
 
 const SOURCE = 'twake://mail';
 
-export const createActivityPublisher = ({
-  client,
-  exchange,
-  mailWebUrl,
-}: ActivityDeps): ActivityPublisher => {
-  const webRoot = mailWebUrl.replace(/\/+$/, '');
-
+export const createActivityPublisher = ({ client, exchange }: ActivityDeps): ActivityPublisher => {
   const publish = async (
     type: string,
     twakeorg: string,
@@ -63,7 +56,6 @@ export const createActivityPublisher = ({
             type: 'message',
             id: messageId,
             title: subject.trim() || '(no subject)',
-            url: `${webRoot}/dashboard/${encodeURIComponent(messageId)}?type=normal`,
             container: { kind: 'mailbox', id: mailboxId },
           },
         },

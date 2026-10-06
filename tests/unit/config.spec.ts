@@ -5,7 +5,6 @@ const baseEnv = {
   RABBITMQ_URL: 'amqp://localhost',
   DATABASE_URL: 'postgres://localhost/mail',
   TMAIL_WEBADMIN_URL: 'http://tmail-admin:8000',
-  TMAIL_WEB_URL: 'https://mail.acme.com',
 };
 
 describe('loadConfig', () => {

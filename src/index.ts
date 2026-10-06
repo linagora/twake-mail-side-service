@@ -32,7 +32,6 @@ const main = async (): Promise<void> => {
   const activity = createActivityPublisher({
     client: consumer.publisher,
     exchange: config.RABBITMQ_ACTIVITY_EXCHANGE,
-    mailWebUrl: config.TMAIL_WEB_URL,
   });
   const spaces = createSpaceService({
     db: db.db,
