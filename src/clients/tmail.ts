@@ -26,7 +26,6 @@ export class TmailError extends Error {
 }
 
 export class AddressTakenError extends TmailError {}
-export class DomainNotFoundError extends TmailError {}
 
 export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailClient => {
   const root = baseUrl.replace(/\/+$/, '');
@@ -57,9 +56,6 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
       } catch (err) {
         if (err instanceof TmailError && err.status === 409) {
           throw new AddressTakenError(err.status, err.body);
-        }
-        if (err instanceof TmailError && err.status === 404) {
-          throw new DomainNotFoundError(err.status, err.body);
         }
         throw err;
       }

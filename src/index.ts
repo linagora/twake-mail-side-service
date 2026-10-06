@@ -57,7 +57,7 @@ const main = async (): Promise<void> => {
     await db.migrate();
     await consumer.start();
   } catch (err) {
-    logger.fatal({ err }, 'consumer failed to start');
+    logger.fatal({ err }, 'startup failed');
     await health.stop();
     process.exit(1);
   }

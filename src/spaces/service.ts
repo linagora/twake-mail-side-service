@@ -100,10 +100,14 @@ export const createSpaceService = ({
     let address = space.address;
     if (address) {
       const { name, domain } = splitAddress(address);
-      await tmail.createTeamMailbox(domain, name);
-    } else {
-      address = await pickAddress(spaceId, mailboxName(space.name), organization.domain);
+      try {
+        await tmail.createTeamMailbox(domain, name);
+      } catch (err) {
+        if (!(err instanceof AddressTakenError)) throw err;
+        address = null;
+      }
     }
+    address ??= await pickAddress(spaceId, mailboxName(space.name), organization.domain);
 
     const { name, domain } = splitAddress(address);
     const members = await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId));
@@ -208,7 +212,17 @@ export const createSpaceService = ({
         .select({ spaceId: spaces.spaceId })
         .from(spaces)
         .where(and(eq(spaces.organizationId, event.organizationId), isNull(spaces.provisionedAt)));
-      for (const { spaceId } of waiting) await provision(spaceId);
+      // One failing space must not hold back the others; the retry only redoes the failed ones.
+      const failures: unknown[] = [];
+      for (const { spaceId } of waiting) {
+        try {
+          await provision(spaceId);
+        } catch (err) {
+          logger.error({ err, spaceId }, 'provisioning failed');
+          failures.push(err);
+        }
+      }
+      if (failures.length) throw failures[0];
     },
 
     async userDeleted(body) {

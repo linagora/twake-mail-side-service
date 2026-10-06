@@ -1,12 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  AddressTakenError,
-  createTmailClient,
-  DomainNotFoundError,
-  TmailError,
-} from '../../../src/clients/tmail.js';
+import { AddressTakenError, createTmailClient, TmailError } from '../../../src/clients/tmail.js';
 
 interface Recorded {
   method?: string;
@@ -55,14 +50,6 @@ describe('createTmailClient', () => {
 
     await expect(client().createTeamMailbox('acme.com', 'sales')).rejects.toBeInstanceOf(
       AddressTakenError,
-    );
-  });
-
-  it('reports a domain TMail does not know', async () => {
-    reply = { status: 404, body: '{"message":"no domain"}' };
-
-    await expect(client().createTeamMailbox('acme.com', 'sales')).rejects.toBeInstanceOf(
-      DomainNotFoundError,
     );
   });
 

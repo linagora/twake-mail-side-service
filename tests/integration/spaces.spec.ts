@@ -152,6 +152,36 @@ describe('space service', () => {
     expect(activity.provisioned).toHaveBeenCalledOnce();
   });
 
+  it('picks another address when the stored one was taken in TMail meanwhile', async () => {
+    await service().dnsValidated(validated());
+    tmail.addMember.mockRejectedValueOnce(new Error('tmail down'));
+    await expect(service().spaceCreated(created())).rejects.toThrow('tmail down');
+
+    tmail.createTeamMailbox.mockImplementation(async (_d: string, name: string) => {
+      if (name === 'sales-eu') throw new AddressTakenError(409, 'held by a user');
+    });
+    await service().spaceCreated(created());
+
+    expect(activity.provisioned).toHaveBeenCalledWith(
+      expect.objectContaining({ address: 'sales-eu-2@acme.com' }),
+    );
+  });
+
+  it('provisions the other waiting spaces when one fails', async () => {
+    await service().spaceCreated(created());
+    await service().spaceCreated(created(OTHER_SPACE, 'Support'));
+    tmail.createTeamMailbox.mockImplementation(async (_d: string, name: string) => {
+      if (name === 'sales-eu') throw new Error('tmail down');
+    });
+
+    await expect(service().dnsValidated(validated())).rejects.toThrow('tmail down');
+
+    expect(activity.provisioned).toHaveBeenCalledOnce();
+    expect(activity.provisioned).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: OTHER_SPACE, address: 'support@acme.com' }),
+    );
+  });
+
   it('follows member changes once provisioned', async () => {
     await service().dnsValidated(validated());
     await service().spaceCreated(created());
