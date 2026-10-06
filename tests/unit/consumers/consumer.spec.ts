@@ -21,6 +21,7 @@ const config = loadConfig({
   RABBITMQ_URL: 'amqp://x',
   DATABASE_URL: 'postgres://x',
   TMAIL_WEBADMIN_URL: 'http://x',
+  TMAIL_WEB_URL: 'http://x',
 });
 
 describe('createConsumer', () => {

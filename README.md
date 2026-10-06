@@ -1,6 +1,6 @@
 # twake-mail-side-service
 
-Gives each TwakeSpace space a TMail team mailbox and keeps its members in step with the space.
+Gives each TwakeSpace space a TMail team mailbox, keeps its members in step with the space, and reports the mailbox's mail to the space feed.
 
 ## Quick start
 

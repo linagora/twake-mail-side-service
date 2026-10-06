@@ -59,6 +59,14 @@ export const createConsumer = ({
               exchange: config.RABBITMQ_USER_DELETED_EXCHANGE,
               routingKey: config.RABBITMQ_USER_DELETED_ROUTING_KEY,
             },
+            {
+              exchange: config.RABBITMQ_MAIL_EXCHANGE,
+              routingKey: config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY,
+            },
+            {
+              exchange: config.RABBITMQ_MAIL_EXCHANGE,
+              routingKey: config.RABBITMQ_MAIL_SENT_ROUTING_KEY,
+            },
           ],
           deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
           passiveExchanges: true,

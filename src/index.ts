@@ -6,6 +6,7 @@ import { createRouter } from './consumers/router.js';
 import { createDbClient } from './db.js';
 import { createHealthServer } from './health.js';
 import { logger } from './logger.js';
+import { createMailService } from './mail/service.js';
 import { createMetrics } from './metrics.js';
 import { createSpaceService } from './spaces/service.js';
 
@@ -25,18 +26,21 @@ const main = async (): Promise<void> => {
       void shutdown('subscriptionLost', 1);
     },
   });
+  const activity = createActivityPublisher({
+    client: consumer.publisher,
+    exchange: config.RABBITMQ_ACTIVITY_EXCHANGE,
+    mailWebUrl: config.TMAIL_WEB_URL,
+  });
   const spaces = createSpaceService({
     db: db.db,
     tmail: createTmailClient({
       baseUrl: config.TMAIL_WEBADMIN_URL,
       password: config.TMAIL_WEBADMIN_PASSWORD,
     }),
-    activity: createActivityPublisher({
-      client: consumer.publisher,
-      exchange: config.RABBITMQ_ACTIVITY_EXCHANGE,
-    }),
+    activity,
     logger,
   });
+  const mail = createMailService({ db: db.db, activity, logger });
   const route = createRouter({
     handlers: {
       'twake.space.created': spaces.spaceCreated,
@@ -45,6 +49,8 @@ const main = async (): Promise<void> => {
       'twake.space.member.role.changed': spaces.memberRoleChanged,
       [config.RABBITMQ_DNS_ROUTING_KEY]: spaces.dnsValidated,
       [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: spaces.userDeleted,
+      [config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY]: mail.messageAdded,
+      [config.RABBITMQ_MAIL_SENT_ROUTING_KEY]: mail.messageAdded,
     },
     logger,
     metrics,

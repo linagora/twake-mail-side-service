@@ -10,6 +10,9 @@ const envSchema = z.object({
   RABBITMQ_DNS_ROUTING_KEY: z.string().default('dns.validated'),
   RABBITMQ_USER_DELETED_EXCHANGE: z.string().default('b2b'),
   RABBITMQ_USER_DELETED_ROUTING_KEY: z.string().default('domain.user.deleted'),
+  RABBITMQ_MAIL_EXCHANGE: z.string().default('tmail'),
+  RABBITMQ_MAIL_RECEIVED_ROUTING_KEY: z.string().default('team-mailbox.message.received'),
+  RABBITMQ_MAIL_SENT_ROUTING_KEY: z.string().default('team-mailbox.message.sent'),
   RABBITMQ_ACTIVITY_EXCHANGE: z.string().default('activity'),
   RABBITMQ_PREFETCH: positiveInt.default(1),
   RABBITMQ_MAX_RETRIES: positiveInt.default(5),
@@ -19,6 +22,7 @@ const envSchema = z.object({
 
   TMAIL_WEBADMIN_URL: z.url(),
   TMAIL_WEBADMIN_PASSWORD: z.string().optional(),
+  TMAIL_WEB_URL: z.url(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   HEALTH_PORT: positiveInt.default(8080),
