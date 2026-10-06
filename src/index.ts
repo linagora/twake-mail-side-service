@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createActivityPublisher } from './activity.js';
 import { createTmailClient } from './clients/tmail.js';
 import { loadConfig } from './config.js';
@@ -46,6 +47,8 @@ const main = async (): Promise<void> => {
   const route = createRouter({
     handlers: {
       'twake.space.created': spaces.spaceCreated,
+      'twake.space.synced': spaces.spaceSynced,
+      'twake.space.sync.completed': spaces.syncCompleted,
       'twake.space.updated': spaces.spaceRenamed,
       'twake.space.deleted': spaces.spaceDeleted,
       'twake.space.member.added': spaces.memberAdded,
@@ -66,6 +69,16 @@ const main = async (): Promise<void> => {
   try {
     await db.migrate();
     await consumer.start();
+    // A sync request fans out to every app and every space, so only a first deployment sends one.
+    if (!(await spaces.hasSpaces())) {
+      await consumer.publisher.publish(
+        config.RABBITMQ_SPACE_EXCHANGE,
+        'twake.space.sync.requested',
+        { timestamp: new Date().toISOString() },
+        { messageId: randomUUID() },
+      );
+      logger.info('no space stored yet, sync of every organization requested');
+    }
   } catch (err) {
     logger.fatal({ err }, 'startup failed');
     await health.stop();

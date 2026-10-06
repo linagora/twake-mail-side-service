@@ -44,10 +44,32 @@ const validated = (mail = true) => ({
   chatDnsConfigurationValidated: false,
 });
 
-const memberEvent = (uuid: string, email: string, role: string) => ({
+const memberEvent = (
+  uuid: string,
+  email: string,
+  role: string,
+  timestamp = '2026-10-06T11:00:00Z',
+) => ({
   organizationId: 'acme',
   id: SPACE,
   members: [member(uuid, email, role)],
+  timestamp,
+});
+
+const synced = (timestamp: string, members: ReturnType<typeof member>[], name = 'Sales EU') => ({
+  organizationId: 'acme',
+  id: SPACE,
+  name,
+  members,
+  groups: [],
+  timestamp,
+});
+
+const renamed = (name: string, timestamp = '2026-10-06T11:00:00Z') => ({
+  organizationId: 'acme',
+  id: SPACE,
+  name,
+  timestamp,
 });
 
 let container: StartedPostgreSqlContainer;
@@ -75,7 +97,10 @@ beforeEach(async () => {
     createTeamMailbox: vi.fn().mockResolvedValue(undefined),
     deleteTeamMailbox: vi.fn().mockResolvedValue(undefined),
     rootMailboxId: vi.fn(async (_domain: string, name: string) => `id-${name}`),
-    listMembers: vi.fn().mockResolvedValue(['jane@acme.com', 'bob@acme.com']),
+    listMembers: vi.fn().mockResolvedValue([
+      { username: 'jane@acme.com', role: 'manager' },
+      { username: 'bob@acme.com', role: 'member' },
+    ]),
     addMember: vi.fn().mockResolvedValue(undefined),
     removeMember: vi.fn().mockResolvedValue(undefined),
   };
@@ -251,7 +276,8 @@ describe('space service', () => {
 
   it('gives a waiting space the address of its new name', async () => {
     await service().spaceCreated(created());
-    await service().spaceRenamed({ organizationId: 'acme', id: SPACE, name: 'Sales World' });
+    await service().spaceRenamed(renamed('Sales World'));
+    await service().spaceRenamed(renamed('Sales Old', '2026-10-06T10:30:00Z'));
     await service().dnsValidated(validated());
 
     expect(tmail.createTeamMailbox).toHaveBeenCalledWith('acme.com', 'sales-world');
@@ -260,7 +286,7 @@ describe('space service', () => {
   it('keeps the address of a provisioned space it renames', async () => {
     await service().dnsValidated(validated());
     await service().spaceCreated(created());
-    await service().spaceRenamed({ organizationId: 'acme', id: SPACE, name: 'Sales World' });
+    await service().spaceRenamed(renamed('Sales World'));
 
     const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
     expect(stored).toMatchObject({ name: 'Sales World', address: 'sales-eu@acme.com' });
@@ -336,6 +362,111 @@ describe('space service', () => {
     expect(tmail.listMembers).not.toHaveBeenCalled();
     expect(tmail.createTeamMailbox).not.toHaveBeenCalled();
     expect(await client.db.select().from(spaces)).toEqual([]);
+  });
+
+  it('ignores a member event older than the last one applied', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    await service().memberRoleChanged(memberEvent(BOB, 'bob@acme.com', 'admin'));
+    tmail.addMember.mockClear();
+
+    await service().memberRemoved(
+      memberEvent(BOB, 'bob@acme.com', 'admin', '2026-10-06T10:30:00Z'),
+    );
+    await service().memberRoleChanged(memberEvent(BOB, 'bob@acme.com', 'viewer'));
+
+    expect(tmail.removeMember.mock.calls).toEqual([['acme.com', 'sales-eu', 'bob@acme.com']]);
+  });
+
+  it('makes the team mailbox match a synced space', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    tmail.addMember.mockClear();
+    tmail.listMembers.mockResolvedValue([
+      { username: 'jane@acme.com', role: 'manager' },
+      { username: 'bob@acme.com', role: 'member' },
+      { username: 'eve@acme.com', role: 'member' },
+    ]);
+
+    await service().spaceSynced(
+      synced('2026-10-07T02:00:00Z', [
+        member(JANE, 'jane@acme.com', 'admin'),
+        member(BOB, 'bob@acme.com', 'admin'),
+        member(VIC, 'vic@acme.com', 'editor'),
+      ]),
+    );
+
+    expect(tmail.addMember.mock.calls).toEqual([
+      ['acme.com', 'sales-eu', 'bob@acme.com', 'manager'],
+      ['acme.com', 'sales-eu', 'vic@acme.com', 'member'],
+    ]);
+    expect(tmail.removeMember.mock.calls).toEqual([['acme.com', 'sales-eu', 'eve@acme.com']]);
+    expect(tmail.createTeamMailbox).toHaveBeenCalledOnce();
+  });
+
+  it('provisions a synced space it never heard of', async () => {
+    await service().dnsValidated(validated());
+
+    await service().spaceSynced(
+      synced('2026-10-07T02:00:00Z', [member(JANE, 'jane@acme.com', 'admin')], 'Old Space'),
+    );
+
+    expect(tmail.createTeamMailbox).toHaveBeenCalledWith('acme.com', 'old-space');
+    expect(tmail.addMember).toHaveBeenCalledWith(
+      'acme.com',
+      'old-space',
+      'jane@acme.com',
+      'manager',
+    );
+    expect(activity.provisioned).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a synced space older than the last event applied', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+
+    await service().spaceSynced(synced('2026-10-06T09:00:00Z', []));
+
+    expect(tmail.listMembers).not.toHaveBeenCalled();
+    expect(tmail.removeMember).not.toHaveBeenCalled();
+  });
+
+  it('closes the spaces a completed sync no longer lists, not the newer ones', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+    await service().spaceCreated({
+      ...created(OTHER_SPACE, 'Support'),
+      timestamp: '2026-10-07T03:00:00Z',
+    });
+
+    await service().syncCompleted({
+      organizationId: 'acme',
+      spaceIds: [],
+      timestamp: '2026-10-07T02:00:00Z',
+    });
+
+    const stored = await client.db.select().from(spaces);
+    expect(stored.find((s) => s.spaceId === SPACE)?.deletedAt).toBeInstanceOf(Date);
+    expect(stored.find((s) => s.spaceId === OTHER_SPACE)?.deletedAt).toBeNull();
+  });
+
+  it('keeps the spaces a completed sync lists', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+
+    await service().syncCompleted({
+      organizationId: 'acme',
+      spaceIds: [SPACE],
+      timestamp: '2026-10-07T02:00:00Z',
+    });
+
+    expect(tmail.removeMember).not.toHaveBeenCalled();
+  });
+
+  it('tells whether it stores any space', async () => {
+    expect(await service().hasSpaces()).toBe(false);
+    await service().spaceCreated(created());
+    expect(await service().hasSpaces()).toBe(true);
   });
 
   it('ignores member events of a space it does not know', async () => {

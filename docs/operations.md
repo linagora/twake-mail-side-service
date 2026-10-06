@@ -26,12 +26,17 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 The user in `RABBITMQ_URL` needs:
 
 - `read` on the four source exchanges. They must exist before the service starts, so TMail with its plugin is deployed first.
+- `write` on the `space` exchange, to request a sync of every organization when its database holds no space yet.
 - `configure`, `write` and `read` on the `twake-mail-side-service` queue, its `.dlq` twin and the `twake-mail-side-service.dlx` exchange, which the service declares.
 - `configure` and `write` on the `activity` exchange, which the service declares (topic, durable) on its first publish.
 
 ## Organizations validated before the first deployment
 
 The admin panel publishes the DNS event only when a validation runs. The service never hears about an organization whose mail DNS was validated before it was deployed, and that organization's spaces wait. After the first deployment, ask the admin panel to validate those organizations again, for example by publishing `dns.validation.requested` on its `operator` exchange.
+
+## Spaces created before the first deployment
+
+On a start with no space stored, the service publishes `twake.space.sync.requested` on `space` with no organization, and ldap-rest answers with a `twake.space.synced` for every space. To repair one organization or one space later, publish `twake.space.sync.requested` with `{"organizationId"}` or `{"organizationId", "id"}`.
 
 ## Endpoints
 

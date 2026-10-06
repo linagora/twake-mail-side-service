@@ -5,7 +5,7 @@ export interface TmailClient {
   createTeamMailbox(domain: string, name: string): Promise<void>;
   deleteTeamMailbox(domain: string, name: string): Promise<void>;
   rootMailboxId(domain: string, name: string): Promise<string>;
-  listMembers(domain: string, name: string): Promise<string[]>;
+  listMembers(domain: string, name: string): Promise<{ username: string; role: TeamMailboxRole }[]>;
   addMember(domain: string, name: string, user: string, role: TeamMailboxRole): Promise<void>;
   removeMember(domain: string, name: string, user: string): Promise<void>;
 }
@@ -86,7 +86,7 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
     async listMembers(domain, name) {
       try {
         const res = await call('GET', `${teamMailbox(domain, name)}/members`);
-        return ((await res.json()) as { username: string }[]).map((m) => m.username);
+        return (await res.json()) as { username: string; role: TeamMailboxRole }[];
       } catch (err) {
         if (isNotFound(err)) return [];
         throw err;
