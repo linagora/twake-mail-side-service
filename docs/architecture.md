@@ -1,14 +1,15 @@
 # Architecture
 
-The service gives each TwakeSpace space a TMail team mailbox. It follows the space and its members from ldap-rest events, and manages the mailbox with TMail's webadmin API.
+The service gives each TwakeSpace space a TMail team mailbox. It follows the space and its members from ldap-rest events, and manages the mailbox with TMail's webadmin API. It reports the mail of each team mailbox to the space feed.
 
 ## Events consumed
 
-The service reads one quorum queue, bound to three exchanges. The names below are the defaults; [operations](operations.md) lists the settings.
+The service reads one quorum queue, bound to four exchanges. The names below are the defaults; [operations](operations.md) lists the settings.
 
 - `space`, routing key `twake.space.#`: published by ldap-rest. The service handles `twake.space.created` and the member events (added, removed, role changed). Renamed and deleted spaces are not handled yet.
 - `admin-panel`, routing key `dns.validated`: an organization's mail domain passed DNS validation. Published by the admin panel.
 - `b2b`, routing key `domain.user.deleted`: a user was deleted. ldap-rest publishes no space member event for a deleted user.
+- `tmail`, routing keys `team-mailbox.message.received` and `team-mailbox.message.sent`: a message was delivered to a team mailbox, or filed in its Sent folder. Published by the team mailbox events plugin of TMail.
 
 The routing key picks the handler. A message with no handler is acked and counted as `ignored`.
 
@@ -17,9 +18,10 @@ flowchart LR
   ldap[ldap-rest] -->|space: twake.space.#| q[(twake-mail-side-service queue)]
   ldap -->|b2b: domain.user.deleted| q
   admin[admin panel] -->|admin-panel: dns.validated| q
+  plugin[TMail plugin] -->|tmail: team-mailbox.message.*| q
   q --> svc[mail side service]
   svc -->|webadmin| tmail[TMail]
-  svc -->|activity: com.twake.mail.space.provisioned.v1| space[TwakeSpace]
+  svc -->|activity: com.twake.mail.*| space[TwakeSpace]
 ```
 
 ## Provisioning
@@ -46,6 +48,14 @@ sequenceDiagram
   M->>T: GET its mailboxes, keep the root's id
   M->>R: activity, com.twake.mail.space.provisioned.v1
 ```
+
+## Mail activity
+
+- For each plugin event, the service finds the space by its team address and publishes `com.twake.mail.message.received.v1` or `com.twake.mail.message.sent.v1` on the activity exchange.
+- The event's object is the message: its id, its subject as the title (`(no subject)` when empty), and a link that opens it in Twake Mail web. Its container is the root mailbox id announced at provisioning.
+- The event id is the mailbox id, the message id and the direction, so a redelivered event is not shown twice.
+- The event names no actor and has no preview: the sender of a received mail is not a member, the plugin does not say which member sent a team mail, and viewers have no access to the mailbox.
+- Mail of a team mailbox that no space owns is acked and dropped. Mail of a space still being provisioned is retried, since its provisioned event has to come first.
 
 ## Ordering and retries
 

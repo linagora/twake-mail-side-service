@@ -5,6 +5,7 @@ const baseEnv = {
   RABBITMQ_URL: 'amqp://localhost',
   DATABASE_URL: 'postgres://localhost/mail',
   TMAIL_WEBADMIN_URL: 'http://tmail-admin:8000',
+  TMAIL_WEB_URL: 'https://mail.acme.com',
 };
 
 describe('loadConfig', () => {
@@ -17,6 +18,9 @@ describe('loadConfig', () => {
     expect(cfg.RABBITMQ_USER_DELETED_EXCHANGE).toBe('b2b');
     expect(cfg.RABBITMQ_USER_DELETED_ROUTING_KEY).toBe('domain.user.deleted');
     expect(cfg.RABBITMQ_ACTIVITY_EXCHANGE).toBe('activity');
+    expect(cfg.RABBITMQ_MAIL_EXCHANGE).toBe('tmail');
+    expect(cfg.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY).toBe('team-mailbox.message.received');
+    expect(cfg.RABBITMQ_MAIL_SENT_ROUTING_KEY).toBe('team-mailbox.message.sent');
     expect(cfg.TMAIL_WEBADMIN_PASSWORD).toBeUndefined();
     expect(cfg.LOG_LEVEL).toBe('info');
     expect(cfg.HEALTH_PORT).toBe(8080);

@@ -15,6 +15,7 @@ src/
   consumers/router.ts Routing key to handler
   spaces/events.ts    Event payload schemas
   spaces/service.ts   Provisioning and membership
+  mail/service.ts     Team mail to activity events
   mailbox/address.ts  Team mailbox name from the space name
   clients/tmail.ts    TMail webadmin client
   activity.ts         Events published on the activity exchange

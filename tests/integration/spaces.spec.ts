@@ -77,7 +77,10 @@ beforeEach(async () => {
     addMember: vi.fn().mockResolvedValue(undefined),
     removeMember: vi.fn().mockResolvedValue(undefined),
   };
-  activity = { provisioned: vi.fn().mockResolvedValue(undefined) };
+  activity = {
+    provisioned: vi.fn().mockResolvedValue(undefined),
+    message: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 describe('space service', () => {
