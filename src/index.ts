@@ -1,3 +1,5 @@
+import { createActivityPublisher } from './activity.js';
+import { createTmailClient } from './clients/tmail.js';
 import { loadConfig } from './config.js';
 import { createConsumer } from './consumers/index.js';
 import { createRouter } from './consumers/router.js';
@@ -5,6 +7,7 @@ import { createDbClient } from './db.js';
 import { createHealthServer } from './health.js';
 import { logger } from './logger.js';
 import { createMetrics } from './metrics.js';
+import { createSpaceService } from './spaces/service.js';
 
 const main = async (): Promise<void> => {
   const config = loadConfig();
@@ -12,16 +15,49 @@ const main = async (): Promise<void> => {
 
   const db = createDbClient(config.DATABASE_URL);
   const metrics = createMetrics();
-  const handler = createRouter({ handlers: {}, logger, metrics });
-  const consumer = createConsumer({ config, logger, handler });
+  // The router is built after the consumer, whose client publishes the activity events.
+  const consumer = createConsumer({
+    config,
+    logger,
+    handler: (message, properties) => route(message, properties),
+    onSubscriptionLost: () => {
+      logger.fatal('a reconnect left the queue unsubscribed');
+      void shutdown('subscriptionLost', 1);
+    },
+  });
+  const spaces = createSpaceService({
+    db: db.db,
+    tmail: createTmailClient({
+      baseUrl: config.TMAIL_WEBADMIN_URL,
+      password: config.TMAIL_WEBADMIN_PASSWORD,
+    }),
+    activity: createActivityPublisher({
+      client: consumer.publisher,
+      exchange: config.RABBITMQ_ACTIVITY_EXCHANGE,
+    }),
+    logger,
+  });
+  const route = createRouter({
+    handlers: {
+      'twake.space.created': spaces.spaceCreated,
+      'twake.space.member.added': spaces.memberAdded,
+      'twake.space.member.removed': spaces.memberRemoved,
+      'twake.space.member.role.changed': spaces.memberRoleChanged,
+      [config.RABBITMQ_DNS_ROUTING_KEY]: spaces.dnsValidated,
+      [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: spaces.userDeleted,
+    },
+    logger,
+    metrics,
+  });
   const health = createHealthServer({ port: config.HEALTH_PORT, consumer, db, metrics, logger });
 
   await health.start();
 
   try {
+    await db.migrate();
     await consumer.start();
   } catch (err) {
-    logger.fatal({ err }, 'consumer failed to start');
+    logger.fatal({ err }, 'startup failed');
     await health.stop();
     process.exit(1);
   }

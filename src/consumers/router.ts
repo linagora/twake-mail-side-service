@@ -1,18 +1,9 @@
-import type {
-  RabbitMQMessage,
-  RabbitMQMessageHandler,
-  RabbitMQMessageProperties,
-} from '@linagora/rabbitmq-client';
+import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import type { Logger } from '../logger.js';
 import type { Metrics } from '../metrics.js';
 
-export type Handler = (
-  message: RabbitMQMessage,
-  properties: RabbitMQMessageProperties,
-) => Promise<void>;
-
 export interface RouterDeps {
-  handlers: Record<string, Handler>;
+  handlers: Record<string, RabbitMQMessageHandler>;
   logger: Logger;
   metrics: Metrics;
 }

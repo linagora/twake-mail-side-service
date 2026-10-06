@@ -6,15 +6,22 @@ export interface Consumer {
   start(): Promise<void>;
   stop(): Promise<void>;
   isReady(): boolean;
+  publisher: Pick<RabbitMQClient, 'publish'>;
 }
 
 export interface ConsumerDeps {
   config: Config;
   logger: Logger;
   handler: RabbitMQMessageHandler;
+  onSubscriptionLost?: () => void;
 }
 
-export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consumer => {
+export const createConsumer = ({
+  config,
+  logger,
+  handler,
+  onSubscriptionLost,
+}: ConsumerDeps): Consumer => {
   let subscribed = false;
   const client = new RabbitMQClient({
     url: config.RABBITMQ_URL,
@@ -25,8 +32,10 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
     closeTimeout: Math.floor(config.SHUTDOWN_TIMEOUT_MS / 2),
     logger,
     hooks: {
+      // The client never retries a failed resubscribe, so a restart is the way back.
       onReconnect: ({ subscriptionsFailed }) => {
         subscribed = subscriptionsFailed === 0;
+        if (!subscribed) onSubscriptionLost?.();
       },
     },
   });
@@ -42,8 +51,14 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
         handler,
         {
           bindings: [
-            { exchange: config.RABBITMQ_ADMIN_PANEL_EXCHANGE, routingKey: 'dns.validated' },
-            { exchange: config.RABBITMQ_B2B_EXCHANGE, routingKey: 'domain.user.deleted' },
+            {
+              exchange: config.RABBITMQ_DNS_EXCHANGE,
+              routingKey: config.RABBITMQ_DNS_ROUTING_KEY,
+            },
+            {
+              exchange: config.RABBITMQ_USER_DELETED_EXCHANGE,
+              routingKey: config.RABBITMQ_USER_DELETED_ROUTING_KEY,
+            },
           ],
           deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
           passiveExchanges: true,
@@ -66,5 +81,6 @@ export const createConsumer = ({ config, logger, handler }: ConsumerDeps): Consu
     isReady() {
       return subscribed && client.isConnected();
     },
+    publisher: client,
   };
 };
