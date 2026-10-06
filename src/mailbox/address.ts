@@ -1,5 +1,6 @@
 const MAX_LENGTH = 64;
 const FALLBACK = 'space';
+const CANDIDATES = 20;
 
 const trimDashes = (value: string): string => value.replace(/^-+|-+$/g, '');
 
@@ -15,8 +16,8 @@ export const mailboxName = (spaceName: string): string => {
   return trimDashes(name.slice(0, MAX_LENGTH)) || FALLBACK;
 };
 
-export const candidateNames = (name: string, count = 20): string[] =>
-  Array.from({ length: count }, (_, i) => {
+export const candidateNames = (name: string): string[] =>
+  Array.from({ length: CANDIDATES }, (_, i) => {
     if (i === 0) return name;
     const suffix = `-${i + 1}`;
     return trimDashes(name.slice(0, MAX_LENGTH - suffix.length)) + suffix;

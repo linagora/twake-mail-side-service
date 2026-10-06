@@ -38,5 +38,4 @@ export const dnsValidated = z.looseObject({
 
 export const userDeleted = z.looseObject({
   uuid: z.uuid(),
-  internalEmail: z.string().optional(),
 });
