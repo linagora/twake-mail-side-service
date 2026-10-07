@@ -28,7 +28,8 @@ flowchart LR
 
 - The service stores each space, its members and their roles, and each organization's mail domain, since later events only carry ids.
 - A space gets its team mailbox once its organization's mail DNS is validated: when the space is created if the DNS event came first, otherwise when the DNS event arrives.
-- The address comes from the space name: accents dropped, lowercased, any character other than a letter, a digit, `-` or `_` replaced by `-`, at most 64 characters. When another space or a TMail team mailbox, user or alias holds it, `-2`, `-3` and so on up to `-20` are added. Renaming a space still waiting for its mailbox changes the address it will get; renaming a provisioned space keeps its address.
+- The address comes from the space name: accents dropped, lowercased, any character other than a letter, a digit, `-` or `_` replaced by `-`, at most 64 characters. When another space or a TMail user or alias holds it, `-2`, `-3` and so on up to `-20` are added. Renaming a space still waiting for its mailbox changes the address it will get; renaming a provisioned space keeps its address.
+- When the address is a TMail team mailbox that no space holds, the service does not provision the space and sends the event to the dead letter queue. The mailbox may be this space's from a lost database row, and only a person can tell. A space gets one team mailbox, never a second.
 - The address is stored before the mailbox is created in TMail, so a retry resumes with the same one.
 - Admins are managers and editors are members. Viewers get no access, since TMail team mailboxes have no read-only access.
 - Once the members are added, the service reads the id of the team mailbox's root mailbox and publishes `com.twake.mail.space.provisioned.v1` with the space id and that id as the mailbox id. It is the JMAP mailbox id the Twake Mail embed opens.

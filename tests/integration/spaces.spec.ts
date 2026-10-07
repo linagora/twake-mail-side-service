@@ -1,3 +1,4 @@
+import { DeadLetterError } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
@@ -160,15 +161,15 @@ describe('space service', () => {
   it('adds a number when the address is taken in TMail or by another space', async () => {
     await service().dnsValidated(validated());
     await service().spaceCreated(created(OTHER_SPACE));
-    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu', 'sales-eu-2']);
+    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
     tmail.createTeamMailbox.mockImplementation(async (_d: string, name: string) => {
-      if (name === 'sales-eu-3') throw new AddressTakenError(409, 'held by a user');
+      if (name === 'sales-eu-2') throw new AddressTakenError(409, 'held by a user');
     });
 
     await service().spaceCreated(created());
 
     expect(activity.provisioned).toHaveBeenLastCalledWith(
-      expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu-4' }),
+      expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu-3' }),
     );
   });
 
@@ -201,6 +202,35 @@ describe('space service', () => {
     );
   });
 
+  it('dead letters a space whose address is a team mailbox no space holds', async () => {
+    await service().dnsValidated(validated());
+    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
+
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+
+    expect(tmail.createTeamMailbox).not.toHaveBeenCalled();
+    expect(activity.provisioned).not.toHaveBeenCalled();
+    const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
+    expect(stored).toMatchObject({ address: null, provisionedAt: null });
+  });
+
+  it('provisions a space linked by hand to an existing team mailbox', async () => {
+    await service().dnsValidated(validated());
+    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+
+    await client.db
+      .update(spaces)
+      .set({ address: 'sales-eu@acme.com' })
+      .where(eq(spaces.spaceId, SPACE));
+    await service().spaceSynced(synced('2026-10-06T12:00:00Z', created().members));
+
+    expect(tmail.createTeamMailbox.mock.calls).toEqual([['acme.com', 'sales-eu']]);
+    expect(activity.provisioned).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu' }),
+    );
+  });
+
   it('provisions the other waiting spaces when one fails', async () => {
     await service().spaceCreated(created());
     await service().spaceCreated(created(OTHER_SPACE, 'Support'));
@@ -214,6 +244,15 @@ describe('space service', () => {
     expect(activity.provisioned).toHaveBeenCalledWith(
       expect.objectContaining({ spaceId: OTHER_SPACE, mailboxId: 'id-support' }),
     );
+  });
+
+  it('retries a DNS event when one space failed and another was dead lettered', async () => {
+    await service().spaceCreated(created());
+    await service().spaceCreated(created(OTHER_SPACE, 'Support'));
+    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
+    tmail.createTeamMailbox.mockRejectedValue(new Error('tmail down'));
+
+    await expect(service().dnsValidated(validated())).rejects.toThrow('tmail down');
   });
 
   it('follows member changes once provisioned', async () => {
