@@ -1,5 +1,5 @@
 import { DeadLetterError } from '@linagora/rabbitmq-client';
-import { and, eq, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { ActivityPublisher } from '../activity.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../clients/tmail.js';
 import type { Db } from '../db.js';
@@ -88,7 +88,7 @@ export const createSpaceService = ({
     const held = await db
       .select({ address: spaces.address })
       .from(spaces)
-      .where(inArray(spaces.address, candidates.map(toAddress)));
+      .where(and(inArray(spaces.address, candidates.map(toAddress)), ne(spaces.spaceId, spaceId)));
     const heldBySpace = new Set(held.map((s) => s.address));
     const inTmail = new Set(await tmail.listTeamMailboxes(domain));
     for (const candidate of candidates) {
@@ -175,17 +175,17 @@ export const createSpaceService = ({
   // TMail is read rather than the stored members, so a member added there by hand is removed too.
   const matchMembers = async (address: string, members: Member[]) => {
     const { name, domain } = splitAddress(address);
-    const wanted = new Map<string, TeamMailboxRole>();
+    const wanted = new Map<string, { email: string; role: TeamMailboxRole }>();
     for (const m of members) {
       const role = TMAIL_ROLES[m.role];
-      if (role) wanted.set(m.email.toLowerCase(), role);
+      if (role) wanted.set(m.email.toLowerCase(), { email: m.email, role });
     }
     for (const { username, role } of await tmail.listMembers(domain, name)) {
       const want = wanted.get(username.toLowerCase());
       if (!want) await tmail.removeMember(domain, name, username);
-      else if (want === role) wanted.delete(username.toLowerCase());
+      else if (want.role === role) wanted.delete(username.toLowerCase());
     }
-    for (const [email, role] of wanted) await tmail.addMember(domain, name, email, role);
+    for (const { email, role } of wanted.values()) await tmail.addMember(domain, name, email, role);
   };
 
   const closeSpace = async (spaceId: string) => {

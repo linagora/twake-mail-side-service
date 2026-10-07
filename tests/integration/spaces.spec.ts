@@ -97,18 +97,25 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.db.execute(sql`TRUNCATE organizations, spaces, space_members CASCADE`);
-  const members = new Map<string, TeamMailboxRole>();
+  const mailboxes = new Map<string, Map<string, TeamMailboxRole>>();
+  const members = (domain: string, name: string) => {
+    const key = `${name}@${domain}`;
+    if (!mailboxes.has(key)) mailboxes.set(key, new Map());
+    return mailboxes.get(key)!;
+  };
   tmail = {
     listTeamMailboxes: vi.fn().mockResolvedValue([]),
     createTeamMailbox: vi.fn().mockResolvedValue(undefined),
     deleteTeamMailbox: vi.fn().mockResolvedValue(undefined),
     rootMailboxId: vi.fn(async (_domain: string, name: string) => `id-${name}`),
-    listMembers: vi.fn(async () => [...members].map(([username, role]) => ({ username, role }))),
-    addMember: vi.fn(async (_d: string, _n: string, user: string, role: TeamMailboxRole) => {
-      members.set(user, role);
+    listMembers: vi.fn(async (domain: string, name: string) =>
+      [...members(domain, name)].map(([username, role]) => ({ username, role })),
+    ),
+    addMember: vi.fn(async (domain: string, name: string, user: string, role: TeamMailboxRole) => {
+      members(domain, name).set(user, role);
     }),
-    removeMember: vi.fn(async (_d: string, _n: string, user: string) => {
-      members.delete(user);
+    removeMember: vi.fn(async (domain: string, name: string, user: string) => {
+      members(domain, name).delete(user);
     }),
   };
   activity = {
@@ -218,6 +225,18 @@ describe('space service', () => {
     expect(activity.provisioned).not.toHaveBeenCalled();
     const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
     expect(stored).toMatchObject({ address: null, provisionedAt: null });
+  });
+
+  it('does not take its own stored team mailbox for another space', async () => {
+    await service().dnsValidated(validated());
+    tmail.addMember.mockRejectedValueOnce(new Error('tmail down'));
+    await expect(service().spaceCreated(created())).rejects.toThrow('tmail down');
+
+    tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
+    tmail.createTeamMailbox.mockRejectedValue(new AddressTakenError(409, 'held by a user'));
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+
+    expect(tmail.createTeamMailbox).not.toHaveBeenCalledWith('acme.com', 'sales-eu-2');
   });
 
   it('provisions a space linked by hand to an existing team mailbox', async () => {

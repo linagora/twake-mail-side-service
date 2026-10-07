@@ -39,7 +39,7 @@ On a start with no space stored, the service publishes `twake.space.sync.request
 
 ## A space whose address is already a team mailbox
 
-The dead letter says `<address> is a team mailbox no space holds`. The service does not know that mailbox, for example because it was created by hand or the space's row was lost. If it is the space's mailbox, store its address and request a sync of that space:
+The service logs `<address> is a team mailbox no space holds, store it as space <space id>'s address to use it`, and the event goes to the dead letter queue. A DNS event may carry another space's error there instead, so search the logs. The service does not know that mailbox, for example because it was created by hand or the space's row was lost. If it is the space's mailbox, store its address and request a sync of that space:
 
 ```sql
 UPDATE spaces SET address = lower('<address>') WHERE space_id = '<space id>';
