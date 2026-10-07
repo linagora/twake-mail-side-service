@@ -1,4 +1,5 @@
-import { and, eq, isNotNull, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
+import { DeadLetterError } from '@linagora/rabbitmq-client';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { ActivityPublisher } from '../activity.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../clients/tmail.js';
 import type { Db } from '../db.js';
@@ -66,7 +67,7 @@ const splitAddress = (address: string) => {
 const isStale = (space: { lastEventAt: Date | null } | undefined, timestamp: string) =>
   Boolean(space?.lastEventAt && new Date(timestamp) < space.lastEventAt);
 
-type Member = { uuid: string; email: string; role: SpaceRole };
+type Member = { email: string; role: SpaceRole };
 
 export const createSpaceService = ({
   db,
@@ -80,10 +81,25 @@ export const createSpaceService = ({
   };
 
   const pickAddress = async (spaceId: string, name: string, domain: string): Promise<string> => {
+    const candidates = candidateNames(name);
+    const toAddress = (candidate: string) => `${candidate}@${domain}`;
+    // Spaces before TMail: the purge deletes the mailbox before the row, so a purged
+    // mailbox is never seen in TMail without its space.
+    const held = await db
+      .select({ address: spaces.address })
+      .from(spaces)
+      .where(and(inArray(spaces.address, candidates.map(toAddress)), ne(spaces.spaceId, spaceId)));
+    const heldBySpace = new Set(held.map((s) => s.address));
     const inTmail = new Set(await tmail.listTeamMailboxes(domain));
-    for (const candidate of candidateNames(name)) {
-      if (inTmail.has(candidate)) continue;
-      const address = `${candidate}@${domain}`;
+    for (const candidate of candidates) {
+      const address = toAddress(candidate);
+      if (inTmail.has(candidate)) {
+        if (heldBySpace.has(address)) continue;
+        // It may be this space's mailbox from a lost row: only a person can tell.
+        throw new DeadLetterError(
+          `${address} is a team mailbox no space holds, store it as space ${spaceId}'s address to use it`,
+        );
+      }
       try {
         // Stored before TMail is called, so a retry resumes with the same address.
         await db.update(spaces).set({ address }).where(eq(spaces.spaceId, spaceId));
@@ -127,11 +143,11 @@ export const createSpaceService = ({
     address ??= await pickAddress(spaceId, mailboxName(space.name), organization.domain);
 
     const { name, domain } = splitAddress(address);
-    const members = await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId));
-    for (const member of members) {
-      const role = TMAIL_ROLES[member.role];
-      if (role) await tmail.addMember(domain, name, member.email, role);
-    }
+    // The mailbox may predate the space's row, linked by hand, with members it no longer has.
+    await matchMembers(
+      address,
+      await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId)),
+    );
 
     const mailboxId = await tmail.rootMailboxId(domain, name);
     await activity.provisioned({ organizationId: space.organizationId, spaceId, mailboxId });
@@ -159,17 +175,17 @@ export const createSpaceService = ({
   // TMail is read rather than the stored members, so a member added there by hand is removed too.
   const matchMembers = async (address: string, members: Member[]) => {
     const { name, domain } = splitAddress(address);
-    const wanted = new Map<string, TeamMailboxRole>();
+    const wanted = new Map<string, { email: string; role: TeamMailboxRole }>();
     for (const m of members) {
       const role = TMAIL_ROLES[m.role];
-      if (role) wanted.set(m.email.toLowerCase(), role);
+      if (role) wanted.set(m.email.toLowerCase(), { email: m.email, role });
     }
     for (const { username, role } of await tmail.listMembers(domain, name)) {
       const want = wanted.get(username.toLowerCase());
       if (!want) await tmail.removeMember(domain, name, username);
-      else if (want === role) wanted.delete(username.toLowerCase());
+      else if (want.role === role) wanted.delete(username.toLowerCase());
     }
-    for (const [email, role] of wanted) await tmail.addMember(domain, name, email, role);
+    for (const { email, role } of wanted.values()) await tmail.addMember(domain, name, email, role);
   };
 
   const closeSpace = async (spaceId: string) => {
@@ -193,6 +209,7 @@ export const createSpaceService = ({
   };
 
   // One failing space must not hold back the others; the retry only redoes the failed ones.
+  // A retryable failure wins over a dead letter, or the event would be dropped with it.
   const eachSpace = async (spaceIds: string[], apply: (spaceId: string) => Promise<void>) => {
     const failures: unknown[] = [];
     for (const spaceId of spaceIds) {
@@ -203,7 +220,9 @@ export const createSpaceService = ({
         failures.push(err);
       }
     }
-    if (failures.length) throw failures[0];
+    if (failures.length) {
+      throw failures.find((err) => !(err instanceof DeadLetterError)) ?? failures[0];
+    }
   };
 
   const onMember = (removed: boolean) => async (body: unknown) => {

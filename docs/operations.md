@@ -37,6 +37,16 @@ The admin panel publishes the DNS event only when a validation runs. The service
 
 On a start with no space stored, the service publishes `twake.space.sync.requested` on `space` with no organization, and ldap-rest answers with a `twake.space.synced` for every space. To repair one organization or one space later, publish `twake.space.sync.requested` with `{"organizationId"}` or `{"organizationId", "id"}`.
 
+## A space whose address is already a team mailbox
+
+The service logs `<address> is a team mailbox no space holds, store it as space <space id>'s address to use it`, and the event goes to the dead letter queue. A DNS event may carry another space's error there instead, so search the logs. The service does not know that mailbox, for example because it was created by hand or the space's row was lost. If it is the space's mailbox, store its address and request a sync of that space:
+
+```sql
+UPDATE spaces SET address = lower('<address>') WHERE space_id = '<space id>';
+```
+
+The sync makes the mailbox's members those of the space, removing anyone else, and publishes its id. If it is not the space's, rename the space so it gets another address, or delete the mailbox, then request a sync of that space.
+
 ## Endpoints
 
 - `GET /healthz`: the process is alive.
