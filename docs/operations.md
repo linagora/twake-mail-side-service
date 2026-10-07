@@ -42,10 +42,10 @@ On a start with no space stored, the service publishes `twake.space.sync.request
 The dead letter says `<address> is a team mailbox no space holds`. The service does not know that mailbox, for example because it was created by hand or the space's row was lost. If it is the space's mailbox, store its address and request a sync of that space:
 
 ```sql
-UPDATE spaces SET address = '<address>' WHERE space_id = '<space id>';
+UPDATE spaces SET address = lower('<address>') WHERE space_id = '<space id>';
 ```
 
-The sync adds the members to that mailbox and publishes its id. If it is not the space's, rename the space so it gets another address, or delete the mailbox.
+The sync makes the mailbox's members those of the space, removing anyone else, and publishes its id. If it is not the space's, rename the space so it gets another address, or delete the mailbox, then request a sync of that space.
 
 ## Endpoints
 

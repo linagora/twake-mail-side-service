@@ -67,7 +67,7 @@ const splitAddress = (address: string) => {
 const isStale = (space: { lastEventAt: Date | null } | undefined, timestamp: string) =>
   Boolean(space?.lastEventAt && new Date(timestamp) < space.lastEventAt);
 
-type Member = { uuid: string; email: string; role: SpaceRole };
+type Member = { email: string; role: SpaceRole };
 
 export const createSpaceService = ({
   db,
@@ -83,15 +83,14 @@ export const createSpaceService = ({
   const pickAddress = async (spaceId: string, name: string, domain: string): Promise<string> => {
     const candidates = candidateNames(name);
     const toAddress = (candidate: string) => `${candidate}@${domain}`;
-    const [teamMailboxes, held] = await Promise.all([
-      tmail.listTeamMailboxes(domain),
-      db
-        .select({ address: spaces.address })
-        .from(spaces)
-        .where(inArray(spaces.address, candidates.map(toAddress))),
-    ]);
-    const inTmail = new Set(teamMailboxes);
+    // Spaces before TMail: the purge deletes the mailbox before the row, so a purged
+    // mailbox is never seen in TMail without its space.
+    const held = await db
+      .select({ address: spaces.address })
+      .from(spaces)
+      .where(inArray(spaces.address, candidates.map(toAddress)));
     const heldBySpace = new Set(held.map((s) => s.address));
+    const inTmail = new Set(await tmail.listTeamMailboxes(domain));
     for (const candidate of candidates) {
       const address = toAddress(candidate);
       if (inTmail.has(candidate)) {
@@ -144,11 +143,11 @@ export const createSpaceService = ({
     address ??= await pickAddress(spaceId, mailboxName(space.name), organization.domain);
 
     const { name, domain } = splitAddress(address);
-    const members = await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId));
-    for (const member of members) {
-      const role = TMAIL_ROLES[member.role];
-      if (role) await tmail.addMember(domain, name, member.email, role);
-    }
+    // The mailbox may predate the space's row, linked by hand, with members it no longer has.
+    await matchMembers(
+      address,
+      await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId)),
+    );
 
     const mailboxId = await tmail.rootMailboxId(domain, name);
     await activity.provisioned({ organizationId: space.organizationId, spaceId, mailboxId });
