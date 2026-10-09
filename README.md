@@ -2,18 +2,28 @@
 
 Gives each TwakeSpace space a TMail team mailbox, keeps its members in step with the space, and reports the mailbox's mail to the space feed.
 
+```mermaid
+flowchart LR
+  apps[ldap-rest, admin panel, TMail] -->|events| svc[mail side service]
+  svc -->|team mailboxes and members| tmail[TMail]
+  svc -->|feed events| space[TwakeSpace]
+```
+
 ## Quick start
 
 ```sh
 npm install
-cp .env.example .env  # then edit
-npm run dev
-npm run test:unit  # npm test also runs the integration tests, which need Docker
+npm run test:unit         # npm test also runs the integration tests, which need Docker
 ```
+
+[Running locally](docs/running-locally.md) starts the service against Docker RabbitMQ and PostgreSQL. The service reads its configuration from the environment only; `.env.example` lists every variable.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md): what the service does and how events flow.
-- [Operations](docs/operations.md): configuration, RabbitMQ and database permissions, endpoints and metrics.
-- [Development](docs/development.md): project layout, tests, releasing.
-- [Running locally](docs/running-locally.md): run the service against Docker RabbitMQ and PostgreSQL.
+- [Architecture](docs/architecture.md): the systems around the service, its parts, startup, ordering and retries.
+- [Dependencies](docs/dependencies.md): what the service needs from each system it talks to, and its libraries.
+- [Events](docs/events.md): every event consumed and published.
+- [Team mailboxes](docs/team-mailboxes.md): provisioning, members, deletion, sync and mail activity.
+- [Data model](docs/data-model.md): tables and migrations.
+- [Operations](docs/operations.md): configuration, permissions, endpoints, metrics and repairs.
+- [Development](docs/development.md): project layout, checks, releasing.
