@@ -57,15 +57,15 @@ A space's state follows from these columns:
 stateDiagram-v2
   [*] --> Waiting: created or synced
   Waiting --> Provisioned: mail DNS validated
-  Waiting --> [*]: deleted before an address was picked
-  Waiting --> Closed: deleted after an address was picked
+  Waiting --> [*]: deleted, or missing from a sync, before an address was picked
+  Waiting --> Closed: deleted, or missing from a sync, after an address was picked
   Provisioned --> Closed: deleted, or missing from a sync
   Closed --> [*]: purge after 30 days
 ```
 
 ## space_members
 
-The members of each live space, with their space role (`viewer`, `editor` or `admin`). Rows are removed with the space, when the space is closed, and when the user is deleted. The index on `user_id` serves user deletion.
+The members of each live space, with their space role (`viewer`, `editor` or `admin`). A member removal event deletes its rows, and a sync replaces all of a space's rows. Rows are also removed when the space is closed or purged, and when the user is deleted. The index on `user_id` serves user deletion.
 
 ## Migrations
 

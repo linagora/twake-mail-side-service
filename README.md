@@ -2,13 +2,6 @@
 
 Gives each TwakeSpace space a TMail team mailbox, keeps its members in step with the space, and reports the mailbox's mail to the space feed.
 
-```mermaid
-flowchart LR
-  apps[ldap-rest, admin panel, TMail] -->|events| svc[mail side service]
-  svc -->|team mailboxes and members| tmail[TMail]
-  svc -->|feed events| space[TwakeSpace]
-```
-
 ## Quick start
 
 ```sh
@@ -16,7 +9,7 @@ npm install
 npm run test:unit         # npm test also runs the integration tests, which need Docker
 ```
 
-[Running locally](docs/running-locally.md) starts the service against Docker RabbitMQ and PostgreSQL. The service reads its configuration from the environment only; `.env.example` lists every variable.
+[Running locally](docs/running-locally.md) starts the service against Docker RabbitMQ and PostgreSQL. The service reads its configuration from the environment only; [Operations](docs/operations.md#configuration) lists every variable.
 
 ## Documentation
 

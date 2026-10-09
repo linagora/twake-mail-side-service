@@ -2,7 +2,7 @@
 
 The service gives each TwakeSpace space a TMail team mailbox. It follows the space and its members from ldap-rest events, and manages the mailbox with TMail's webadmin API. It reports the mail of each team mailbox to the space feed.
 
-It is a queue consumer with no API of its own: everything it does starts from a RabbitMQ event, except the hourly purge of deleted spaces. Its HTTP port only serves health and metrics.
+It is a queue consumer with no API of its own: everything it does starts from a RabbitMQ event, except the sync request at its first start and the hourly purge of deleted spaces. Its HTTP port only serves health and metrics.
 
 ## Context
 
@@ -39,7 +39,7 @@ flowchart TB
 - The consumer declares the queue, binds it to the four source exchanges, and hands each message to the router. Its RabbitMQ connection also publishes the activity events.
 - The router picks the handler from the routing key alone, and records a metric for each attempt.
 - The space service handles space, member, DNS and user events, provisions and closes team mailboxes, and runs the purge. See [team mailboxes](team-mailboxes.md).
-- The mail service turns team mail events into feed events.
+- The mail service turns team mail events into activity events.
 - The TMail client makes one HTTP call per operation, with a 10 second timeout. Retries come from the queue.
 - State lives in PostgreSQL. See [data model](data-model.md).
 
@@ -67,7 +67,11 @@ sequenceDiagram
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones; the next sync repairs the space.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
+- What repairs a dead letter depends on the event:
+  - Space, member and user deletion events: the next sync of the space.
+  - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).
+  - A team mail event: nothing. That message never shows in the space feed.
 - A malformed event goes straight to the dead letter queue.
 - An event about several spaces (a DNS event, the end of a sync) handles each one, then fails if any failed, so the retry only redoes what is left.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.
