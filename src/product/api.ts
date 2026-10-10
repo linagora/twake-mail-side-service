@@ -1,14 +1,4 @@
-export type TeamMailboxRole = 'manager' | 'member';
-
-export interface TmailClient {
-  listTeamMailboxes(domain: string): Promise<string[]>;
-  createTeamMailbox(domain: string, name: string): Promise<void>;
-  deleteTeamMailbox(domain: string, name: string): Promise<void>;
-  rootMailboxId(domain: string, name: string): Promise<string>;
-  listMembers(domain: string, name: string): Promise<{ username: string; role: TeamMailboxRole }[]>;
-  addMember(domain: string, name: string, user: string, role: TeamMailboxRole): Promise<void>;
-  removeMember(domain: string, name: string, user: string): Promise<void>;
-}
+import { AddressTakenError, type TeamMailboxRole, type TmailClient, TmailError } from './port.js';
 
 export interface TmailOptions {
   baseUrl: string;
@@ -18,17 +8,6 @@ export interface TmailOptions {
 // One attempt per call: the broker client retries the handler, then dead-letters.
 const TIMEOUT_MS = 10_000;
 const MAX_ERROR_BODY = 500;
-
-export class TmailError extends Error {
-  constructor(
-    readonly status: number,
-    readonly body: string,
-  ) {
-    super(`TMail webadmin answered ${status}: ${body}`);
-  }
-}
-
-export class AddressTakenError extends TmailError {}
 
 const isNotFound = (err: unknown) => err instanceof TmailError && err.status === 404;
 

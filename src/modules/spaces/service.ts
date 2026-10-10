@@ -4,7 +4,7 @@ import type { Activity } from '../../events/activity.js';
 import { enqueue } from '../../events/outbox.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
-import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/api.js';
+import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/port.js';
 import { candidateNames, mailboxName } from './address.js';
 import {
   dnsValidated,
