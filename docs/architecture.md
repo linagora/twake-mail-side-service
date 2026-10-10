@@ -29,14 +29,14 @@ flowchart TB
   router --> spaces[space service]
   router --> mail[mail service]
   spaces --> tmailc[TMail webadmin client]
-  spaces --> activity[activity publisher]
-  mail --> activity
-  spaces --> db[(database)]
+  spaces --> db[(database, outbox table)]
   mail --> db
-  activity --> consumer
+  relay[outbox relay] --> db
+  relay --> consumer
 ```
 
-- The consumer declares the queue, binds it to the four source exchanges, and hands each message to the router. Its RabbitMQ connection also publishes the activity events.
+- The consumer declares the queue, binds it to the four source exchanges, and hands each message to the router. Its RabbitMQ connection also publishes what the relay sends.
+- The services publish nothing themselves. They write each event to the `outbox` table in the transaction that stores what it describes. Every `OUTBOX_INTERVAL_MS`, while RabbitMQ is connected, the relay sends the pending rows in id order, with publisher confirms, and deletes each one the broker confirmed. A failed publish ends the run, and the next run retries it. A transaction-scoped advisory lock keeps a single replica relaying.
 - The router picks the handler from the routing key alone, and records a metric for each attempt.
 - The space service handles space, member, DNS and user events, provisions and closes team mailboxes, and runs the purge. See [team mailboxes](team-mailboxes.md).
 - The mail service turns team mail events into activity events.
@@ -55,13 +55,14 @@ sequenceDiagram
   P->>D: apply migrations, under an advisory lock
   P->>R: declare the queue, bind it, subscribe
   opt no space stored yet
-    P->>R: space, twake.space.sync.requested
+    P->>D: outbox: space, twake.space.sync.requested
   end
+  P->>P: start the outbox relay
   P->>P: purge deleted spaces, then every hour
 ```
 
 - An invalid configuration, a failed migration or a missing source exchange stops the process with code 1.
-- On SIGTERM or SIGINT, the service stops consuming, closes the database and the health server, and exits. It is forced out after `SHUTDOWN_TIMEOUT_MS`.
+- On SIGTERM or SIGINT, the service stops the relay, stops consuming, closes the database and the health server, and exits. It is forced out after `SHUTDOWN_TIMEOUT_MS`.
 - An uncaught exception or unhandled rejection shuts it down with code 1.
 
 ## Ordering and retries
