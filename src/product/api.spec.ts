@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTmailClient } from './api.js';
-import { RejectedEventError } from '../events/errors.js';
+import { NotYetKnownError, RejectedEventError } from '../events/errors.js';
 import { AddressTakenError, TmailError } from './port.js';
 
 interface Recorded {
@@ -141,7 +141,15 @@ describe('createTmailClient', () => {
     });
   });
 
-  it.each([500, 503, 429])('leaves a %i answer to be retried', async (status) => {
+  it('removes no one from a team mailbox TMail does not have', async () => {
+    reply = { status: 404, body: '{"message":"The requested team mailbox does not exists"}' };
+
+    await expect(client().removeMember('acme.com', 'sales', 'jane@acme.com')).resolves.toBe(
+      undefined,
+    );
+  });
+
+  it.each([500, 503, 429, 408, 401, 403])('leaves a %i answer to be retried', async (status) => {
     reply = { status, body: 'boom' };
 
     const err = await client()
@@ -153,7 +161,35 @@ describe('createTmailClient', () => {
     expect(err).toMatchObject({ status, body: 'boom' });
   });
 
-  it.each([400, 403, 404])('refuses for good a %i answer', async (status) => {
+  it('reports the credentials TMail refuses, and nothing else', async () => {
+    let refused = 0;
+    const tmail = createTmailClient({ baseUrl, password: 'wrong', onRefused: () => refused++ });
+
+    for (const status of [401, 403, 500, 429]) {
+      reply = { status, body: 'no' };
+      await tmail.removeMember('acme.com', 'sales', 'jane@acme.com').catch(() => {});
+    }
+
+    expect(refused).toBe(2);
+  });
+
+  it('waits for a domain TMail does not have yet', async () => {
+    reply = { status: 404, body: '{"message":"The domain do not exist: acme.com"}' };
+
+    await expect(client().createTeamMailbox('acme.com', 'sales')).rejects.toBeInstanceOf(
+      NotYetKnownError,
+    );
+  });
+
+  it('waits for a team mailbox TMail does not have yet', async () => {
+    reply = { status: 404, body: '{"message":"The requested team mailbox does not exists"}' };
+
+    await expect(
+      client().addMember('acme.com', 'sales', 'jane@acme.com', 'member'),
+    ).rejects.toBeInstanceOf(NotYetKnownError);
+  });
+
+  it.each([400, 422])('refuses for good a %i answer', async (status) => {
     reply = { status, body: 'no' };
 
     const err = await client()
