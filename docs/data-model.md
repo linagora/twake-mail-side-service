@@ -42,13 +42,13 @@ One row per organization the admin panel sent a DNS event for.
 
 ## spaces
 
-One row per space, from its creation until 30 days after its deletion.
+One row per space, kept after its deletion so a replayed event cannot bring the space back.
 
 - `name`: the current space name. It only matters until the space is provisioned, since the address is picked from it once.
 - `address`: the team mailbox address, `<name>@<domain>`, lowercased. Unique, so two spaces never get the same one. Set before the mailbox is created in TMail.
 - `mailbox_id`: the JMAP id of the team mailbox's root mailbox, published in the provisioned event.
 - `provisioned_at`: set once the mailbox exists and its members are added, in the transaction that writes the provisioned event to the outbox. A space with no `provisioned_at` is waiting.
-- `deleted_at`: set when the space is deleted. The row stays, holding its address, until the purge deletes the mailbox.
+- `deleted_at`: set when the space is deleted. The address stays held until the purge deletes the mailbox 30 days later, then it is cleared.
 - `last_event_at`: the newest event timestamp applied to the space. Older events are ignored.
 
 A space's state follows from these columns:
@@ -57,10 +57,9 @@ A space's state follows from these columns:
 stateDiagram-v2
   [*] --> Waiting: created or synced
   Waiting --> Provisioned: mail DNS validated
-  Waiting --> [*]: deleted, or missing from a sync, before an address was picked
-  Waiting --> Closed: deleted, or missing from a sync, after an address was picked
+  Waiting --> Closed: deleted, or missing from a sync
   Provisioned --> Closed: deleted, or missing from a sync
-  Closed --> [*]: purge after 30 days
+  Closed --> Purged: purge after 30 days, address cleared
 ```
 
 ## space_members
@@ -70,6 +69,10 @@ The members of each live space, with their space role (`viewer`, `editor` or `ad
 ## outbox
 
 The messages written but not yet confirmed by the broker: exchange, routing key, message id and body, in `id` order. The relay deletes a row once the broker confirms it, so the table is empty in steady state. Rows that stay mean RabbitMQ is unreachable or refuses them; the relay logs each failure.
+
+## processed_events
+
+The events already handled, keyed by source and id: `amqp` and the message id, or `tmail` and the team mailbox, message id and direction. A row is written once its handler succeeds, so a redelivered copy is acked untouched. Rows older than 7 days are deleted by the hourly purge.
 
 ## parked_events
 

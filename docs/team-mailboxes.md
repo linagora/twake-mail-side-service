@@ -32,7 +32,7 @@ sequenceDiagram
 - When a space is deleted, the service removes every member of its team mailbox in TMail. The mailbox and its mail stay, with no one able to open them.
 - 30 days later, the service deletes the team mailbox. Until then the space keeps its address, so no other space gets it.
 - The service looks for mailboxes due for deletion when it starts and every hour. A deletion TMail fails is tried again at the next run.
-- A space deleted before it got an address is simply forgotten.
+- A deleted space stays deleted: a replayed creation or sync naming it is ignored.
 - Member events and mail of a deleted space are ignored.
 
 ## Sync

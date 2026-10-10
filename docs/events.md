@@ -17,7 +17,7 @@ Exchange `space`, bound with `twake.space.#`.
 - `twake.space.created`: `organizationId`, `id` (uuid), `name`, `members` (optional, defaults to none), `timestamp`.
 - `twake.space.synced`: same shape as created. `members` is the full list, including members through linked groups.
 - `twake.space.updated`: `id`, `name`, `timestamp`. Only the name is read.
-- `twake.space.deleted`: `id`.
+- `twake.space.deleted`: `id`, `organizationId` and `timestamp` (both optional).
 - `twake.space.member.added`, `twake.space.member.removed`, `twake.space.member.role.changed`: `organizationId`, `id`, `members`, `timestamp`. `members` holds the members the event is about.
 - `twake.space.sync.completed`: `organizationId`, `spaceIds` (every space the snapshot listed for the organization), `timestamp`.
 
@@ -33,7 +33,7 @@ Exchange `b2b`, routing key `domain.user.deleted`: `uuid`, the user id.
 
 ### Team mail
 
-Exchange `tmail`, routing keys `team-mailbox.message.received` and `team-mailbox.message.sent`: `teamMailbox` (the address), `direction` (`received` or `sent`), `messageId`, `subject` (may be null), `timestamp`.
+Exchange `tmail`, routing keys `team-mailbox.message.received` and `team-mailbox.message.sent`: `teamMailbox` (the address), `direction` (`received` or `sent`), `messageId`, `subject` (may be null), `timestamp`. The AMQP message id leaves out the team mailbox, so duplicates are found by `teamMailbox`, `messageId` and `direction` instead.
 
 ## Published
 

@@ -34,7 +34,9 @@ export const spaceRenamed = z.looseObject({
 });
 
 export const spaceDeleted = z.looseObject({
+  organizationId: z.string().min(1).optional(),
   id: z.uuid(),
+  timestamp: timestamp.optional(),
 });
 
 export const memberChanged = z.looseObject({
