@@ -85,8 +85,8 @@ export const createSpaceService = ({
   const pickAddress = async (spaceId: string, name: string, domain: string): Promise<string> => {
     const candidates = candidateNames(name);
     const toAddress = (candidate: string) => `${candidate}@${domain}`;
-    // Spaces before TMail: the purge deletes the mailbox before the row, so a purged
-    // mailbox is never seen in TMail without its space.
+    // Spaces before TMail: the purge deletes the mailbox before it clears the address, so a
+    // purged mailbox is never seen in TMail without its space.
     const held = await db
       .select({ address: spaces.address })
       .from(spaces)
@@ -201,13 +201,9 @@ export const createSpaceService = ({
   const closeSpace = async (spaceId: string) => {
     const space = await findSpace(spaceId);
     if (!space || space.deletedAt) return;
-    if (!space.address) {
-      await db.delete(spaces).where(eq(spaces.spaceId, space.spaceId));
-      return;
-    }
     // TMail first: a failed call retries the event with the space still live.
-    await matchMembers(space.address, []);
-    // The row stays until the purge, so the address is not given to another space meanwhile.
+    if (space.address) await matchMembers(space.address, []);
+    // The row outlives the space, so a replayed creation cannot bring it back.
     await db.transaction(async (tx) => {
       await tx.delete(spaceMembers).where(eq(spaceMembers.spaceId, space.spaceId));
       await tx
@@ -277,7 +273,8 @@ export const createSpaceService = ({
 
     async spaceCreated(body) {
       const event = parseEvent(spaceCreated, body);
-      if (isStale(await findSpace(event.id), event.timestamp)) return;
+      const space = await findSpace(event.id);
+      if (space?.deletedAt || isStale(space, event.timestamp)) return;
       await db.transaction(async (tx) => {
         await tx
           .insert(spaces)
@@ -353,27 +350,45 @@ export const createSpaceService = ({
     // The address is picked at provisioning, so a rename only matters to a space still waiting.
     async spaceRenamed(body) {
       const event = parseEvent(spaceRenamed, body);
-      if (isStale(await findSpace(event.id), event.timestamp)) return;
+      const space = await findSpace(event.id);
+      if (space?.deletedAt || isStale(space, event.timestamp)) return;
       await db.update(spaces).set({ name: event.name }).where(eq(spaces.spaceId, event.id));
       await applied(event.id, event.timestamp);
     },
 
     async spaceDeleted(body) {
-      await closeSpace(parseEvent(spaceDeleted, body).id);
+      const event = parseEvent(spaceDeleted, body);
+      // A deletion that overtook the creation leaves a row, so the creation finds it deleted.
+      if (event.organizationId) {
+        await db
+          .insert(spaces)
+          .values({
+            spaceId: event.id,
+            organizationId: event.organizationId,
+            name: '',
+            deletedAt: sql`now()`,
+          })
+          .onConflictDoNothing();
+      }
+      await closeSpace(event.id);
+      if (event.timestamp) await applied(event.id, event.timestamp);
     },
 
     async purgeDeleted(now = new Date()) {
       const due = await db
         .select({ spaceId: spaces.spaceId, address: spaces.address })
         .from(spaces)
-        .where(lt(spaces.deletedAt, new Date(now.getTime() - RETENTION_MS)));
+        .where(
+          and(
+            lt(spaces.deletedAt, new Date(now.getTime() - RETENTION_MS)),
+            isNotNull(spaces.address),
+          ),
+        );
       for (const { spaceId, address } of due) {
         try {
-          if (address) {
-            const { name, domain } = splitAddress(address);
-            await tmail.deleteTeamMailbox(domain, name);
-          }
-          await db.delete(spaces).where(eq(spaces.spaceId, spaceId));
+          const { name, domain } = splitAddress(address!);
+          await tmail.deleteTeamMailbox(domain, name);
+          await db.update(spaces).set({ address: null }).where(eq(spaces.spaceId, spaceId));
           logger.info({ spaceId, address }, 'team mailbox deleted');
         } catch (err) {
           logger.error({ err, spaceId }, 'team mailbox deletion failed, retried at the next purge');
@@ -403,7 +418,13 @@ export const createSpaceService = ({
       const waiting = await db
         .select({ spaceId: spaces.spaceId })
         .from(spaces)
-        .where(and(eq(spaces.organizationId, event.organizationId), isNull(spaces.provisionedAt)));
+        .where(
+          and(
+            eq(spaces.organizationId, event.organizationId),
+            isNull(spaces.provisionedAt),
+            isNull(spaces.deletedAt),
+          ),
+        );
       await eachSpace(
         waiting.map((s) => s.spaceId),
         provision,
@@ -416,7 +437,13 @@ export const createSpaceService = ({
         .select({ address: spaces.address, email: spaceMembers.email })
         .from(spaceMembers)
         .innerJoin(spaces, eq(spaces.spaceId, spaceMembers.spaceId))
-        .where(and(eq(spaceMembers.userId, event.uuid), isNotNull(spaces.provisionedAt)));
+        .where(
+          and(
+            eq(spaceMembers.userId, event.uuid),
+            isNotNull(spaces.provisionedAt),
+            isNull(spaces.deletedAt),
+          ),
+        );
       // TMail first: a failed call retries the event with the memberships still stored.
       for (const { address, email } of mailboxes) await syncMember(address, email, undefined);
       await db.delete(spaceMembers).where(eq(spaceMembers.userId, event.uuid));

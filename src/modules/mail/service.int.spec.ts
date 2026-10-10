@@ -3,12 +3,13 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createActivity } from '../../events/activity.js';
+import { createInbox } from '../../events/inbox.js';
 import { createOutboxRelay } from '../../events/outbox.js';
 import { MalformedEventError, NotYetKnownError } from '../../events/errors.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
 import { broker, silentLogger } from '../../testing/helpers.js';
 import { spaces } from '../spaces/schema.js';
-import { createMailService } from './service.js';
+import { createMailService, messageKey } from './service.js';
 
 const received = (teamMailbox = 'product-launch@acme.com') => ({
   teamMailbox,
@@ -46,7 +47,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await client.db.execute(sql`TRUNCATE organizations, spaces, space_members, outbox CASCADE`);
+  await client.db.execute(
+    sql`TRUNCATE organizations, spaces, space_members, outbox, processed_events CASCADE`,
+  );
   await client.db.insert(spaces).values([
     {
       spaceId: '6f1c1f3e-1b7a-4f0e-9a51-0c9f2b7d1a10',
@@ -67,6 +70,28 @@ beforeEach(async () => {
 });
 
 describe('mail service', () => {
+  it('reports a message once per team mailbox, whatever its broker message id', async () => {
+    await client.db.insert(spaces).values({
+      spaceId: '9d3e2f1a-5b6c-4d7e-8f90-1a2b3c4d5e6f',
+      organizationId: 'acme',
+      name: 'Sales',
+      address: 'sales@acme.com',
+      mailboxId: 'sales-root-id',
+      provisionedAt: new Date(),
+    });
+    const handler = createInbox({ db: client.db }).wrap(service().messageAdded, messageKey);
+    const props = { exchange: 'tmail', routingKey: 'x', headers: {}, messageId: 'same:received' };
+
+    await handler(received(), props);
+    await handler(received(), props);
+    await handler(received('sales@acme.com'), props);
+
+    expect((await published()).map(({ event }) => (event as { id: string }).id)).toEqual([
+      'root-id:956ee570-c1aa-11f1-bdf6-19e2a75a28cc:received',
+      'sales-root-id:956ee570-c1aa-11f1-bdf6-19e2a75a28cc:received',
+    ]);
+  });
+
   it("reports a space's team mail with its root mailbox id", async () => {
     await service().messageAdded(received());
     await service().messageAdded({

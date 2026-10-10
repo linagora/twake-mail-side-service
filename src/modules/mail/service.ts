@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Activity } from '../../events/activity.js';
 import { enqueue } from '../../events/outbox.js';
 import { NotYetKnownError } from '../../events/errors.js';
+import type { InboxKey } from '../../events/inbox.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
 import { parseEvent } from '../spaces/events.js';
@@ -28,6 +29,14 @@ const teamMessage = z.looseObject({
     .transform((s) => s ?? ''),
   timestamp: z.iso.datetime({ offset: true }),
 });
+
+// TMail's message id leaves out the team mailbox, and a copy into a second one keeps it.
+export const messageKey: InboxKey = (message) => {
+  const event = teamMessage.safeParse(message);
+  if (!event.success) return undefined;
+  const { teamMailbox, messageId, direction } = event.data;
+  return { source: 'tmail', id: `${teamMailbox.toLowerCase()}:${messageId}:${direction}` };
+};
 
 export const createMailService = ({ db, activity, logger }: MailServiceDeps): MailService => ({
   async messageAdded(body) {

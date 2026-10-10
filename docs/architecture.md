@@ -72,6 +72,7 @@ sequenceDiagram
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
+- Each event is handled once. When its handler succeeds, a row of `processed_events` records it, keyed by the AMQP message id (team mail: by team mailbox, message id and direction). A redelivered copy finds the row and is acked untouched. Rows are kept 7 days. Handlers commit each step as they go, so a crash before the row is written runs the handler again, which its idempotent steps allow.
 - A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), waiting `RABBITMQ_RETRY_DELAY` after the first and twice as long after each next one, up to `RABBITMQ_MAX_RETRY_DELAY`. Then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
 - What repairs a dead letter depends on the event:
   - Space, member and user deletion events: the next sync of the space.
