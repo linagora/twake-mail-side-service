@@ -1,15 +1,22 @@
 import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import type { Logger } from '../logger.js';
-import type { Metrics } from '../metrics.js';
+import type { Metrics, Outcome } from '../metrics.js';
+import { NotYetKnownError, type Parking } from '../parking.js';
 
 export interface RouterDeps {
   handlers: Record<string, RabbitMQMessageHandler>;
+  park: Parking['park'];
   logger: Logger;
   metrics: Metrics;
 }
 
 // One queue is bound to several exchanges, so the routing key alone picks the handler.
-export const createRouter = ({ handlers, logger, metrics }: RouterDeps): RabbitMQMessageHandler => {
+export const createRouter = ({
+  handlers,
+  park,
+  logger,
+  metrics,
+}: RouterDeps): RabbitMQMessageHandler => {
   return async (message, properties) => {
     const event = properties.routingKey;
     const started = Date.now();
@@ -19,12 +26,16 @@ export const createRouter = ({ handlers, logger, metrics }: RouterDeps): RabbitM
       metrics.observe(event, 'ignored', Date.now() - started);
       return;
     }
+    let outcome: Outcome = 'failed';
     try {
       await handler(message, properties);
-      metrics.observe(event, 'handled', Date.now() - started);
+      outcome = 'handled';
     } catch (err) {
-      metrics.observe(event, 'failed', Date.now() - started);
-      throw err;
+      if (!(err instanceof NotYetKnownError)) throw err;
+      await park(message, properties, err);
+      outcome = 'parked';
+    } finally {
+      metrics.observe(event, outcome, Date.now() - started);
     }
   };
 };

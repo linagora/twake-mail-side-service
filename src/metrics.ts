@@ -1,6 +1,6 @@
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
-export type Outcome = 'handled' | 'ignored' | 'failed';
+export type Outcome = 'handled' | 'ignored' | 'parked' | 'failed';
 
 export interface Metrics {
   registry: Registry;
@@ -8,7 +8,15 @@ export interface Metrics {
   observe(event: string, outcome: Outcome, latencyMs: number): void;
 }
 
-export const createMetrics = (outboxPending: () => Promise<number> = async () => 0): Metrics => {
+interface Counts {
+  outboxPending?: () => Promise<number>;
+  parked?: () => Promise<number>;
+}
+
+export const createMetrics = ({
+  outboxPending = async () => 0,
+  parked = async () => 0,
+}: Counts = {}): Metrics => {
   const registry = new Registry();
   collectDefaultMetrics({ register: registry });
 
@@ -33,6 +41,15 @@ export const createMetrics = (outboxPending: () => Promise<number> = async () =>
     registers: [registry],
     async collect() {
       this.set(await outboxPending());
+    },
+  });
+
+  new Gauge({
+    name: 'tmss_parked_events',
+    help: 'Events waiting for an object a later event may bring',
+    registers: [registry],
+    async collect() {
+      this.set(await parked());
     },
   });
 
