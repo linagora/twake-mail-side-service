@@ -2,13 +2,13 @@
 
 Every event the service reads or publishes, with the fields it uses. Exchange and routing key names are the defaults; [operations](operations.md) lists the settings that change them.
 
-Payloads are validated on arrival. Fields not listed here are accepted and ignored. A payload that fails validation is logged and dropped, without retries.
+Payloads are validated on arrival. Fields not listed here are accepted and ignored. A payload that fails validation is logged and acked, without retries.
 
 ## Consumed
 
-All of them land on one queue, `twake-mail-side-service.v2`, and the routing key picks the handler. A routing key with no handler is acked and counted as `unrouted`.
+All of them land on one queue, `twake-mail-side-service.v2`, and the routing key picks the handler. The queue is bound with `twake.space.#`, so it also gets space events the service has no handler for, such as `twake.space.sync.requested`. Those are acked and counted as `unrouted`.
 
-An event with a message id is handled once: its id is recorded in `processed_events` after its handler succeeds, and a copy arriving later is acked untouched. The record is written after the handler's own transactions, so a crash in between runs the handler again. That is safe because handlers are idempotent and skip events older than what they already applied.
+An event with a message id is handled once. [Ordering and retries](architecture.md#ordering-and-retries) explains how.
 
 ### Space events
 
@@ -60,4 +60,4 @@ Exchange `activity` (topic, durable, declared on first publish). The routing key
 
 ### Sync request
 
-Exchange `space`, routing key `twake.space.sync.requested`, payload `{ "timestamp" }` with no organization. Sent once at startup when the database holds no space, so ldap-rest answers with a `twake.space.synced` for every space.
+Exchange `space`, routing key `twake.space.sync.requested`, payload `{ "timestamp" }` with no organization. Sent at startup when the database holds no space and the outbox holds no such request yet. ldap-rest answers with a `twake.space.synced` for every space, then a `twake.space.sync.completed` per organization.

@@ -6,24 +6,24 @@ What the service needs from each system it talks to, and what happens when one i
 
 ### RabbitMQ
 
-- The service reads one quorum queue, `twake-mail-side-service.v2`, with a delivery limit of 20, from every replica at once. It declares the queue, its dead letter exchange `twake-mail-side-service.v2.dlx` and the dead letter queue `twake-mail-side-service.v2.dlq`.
-- The four source exchanges (`space`, `admin-panel`, `b2b`, `tmail`) must exist before the service starts: it binds to them without declaring them, so their publishers are deployed first.
+- The service reads one quorum queue, `twake-mail-side-service.v2`, from every replica at once, with a delivery limit of 20. It declares the queue, its dead letter exchange `twake-mail-side-service.v2.dlx` and the dead letter queue `twake-mail-side-service.v2.dlq`.
+- The four source exchanges (`space`, `admin-panel`, `b2b`, `tmail`) must exist before the service starts: it checks them without declaring them, so their publishers are deployed first.
 - It publishes on `activity` and, for the startup sync request, on `space`. The client declares an exchange (topic, durable) on its first publish to it, so `activity` is created by the service.
-- When RabbitMQ is unreachable at startup, the client makes 5 connection attempts, then the process exits with code 1. The client reconnects on its own after that; when a reconnect cannot restore the subscription, the process exits with code 1 so that it is restarted.
+- When RabbitMQ is unreachable at startup, the process exits with code 1 after 5 attempts. Later, the client reconnects on its own. While it is disconnected, nothing is consumed or published, and `/health/live` fails after a minute.
 - The RabbitMQ user's permissions are listed in [operations](operations.md#rabbitmq-permissions).
 
 ### PostgreSQL
 
 - The service owns its database and applies its migrations at startup. See [data model](data-model.md).
-- It uses a pool of twice `RABBITMQ_PREFETCH` plus 8 connections, and `/health/ready` answers 503 when the database does not answer.
-- When PostgreSQL is down, every handler fails: messages are retried, then dead-lettered. [Ordering and retries](architecture.md#ordering-and-retries) says what repairs each kind of dead letter.
+- `/health/ready` answers 503 when the database does not answer.
+- When PostgreSQL is down, every handler fails: messages are retried, then dead lettered. [Operations](operations.md#dead-letters) says what repairs each kind.
 
 ## Twake apps
 
 ### ldap-rest
 
-- Publishes the space events on `space` ([`spaces.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/spaces.ts#L1582)): creation, rename, deletion, members, and the nightly snapshot (`twake.space.synced`, then `twake.space.sync.completed` per organization).
-- Answers `twake.space.sync.requested` on `space` ([`spaces.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/spaces.ts#L681-L685)). The service sends one at its first start.
+- Publishes the space events on `space` ([`spaces.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/spaces.ts#L1582)): creation, rename, deletion and members.
+- Answers `twake.space.sync.requested` on `space` with a snapshot ([`spaces.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/spaces.ts#L1384-L1485)): with no organization, a request per organization; with `organizationId`, a `twake.space.synced` per space, then `twake.space.sync.completed`; with `organizationId` and `id`, that space's `twake.space.synced`, or `twake.space.deleted` when it is gone.
 - Publishes `domain.user.deleted` on `b2b` when a user is deleted ([`cozyProvision.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/cozyProvision.ts#L73-L74), [`clouderyProvision.ts`](https://github.com/linagora/ldap-rest/blob/bbd4e47c70779d4479cc93ffdb2aeaaa275509d5/src/plugins/twake/clouderyProvision.ts#L985)). No space member event is published for a deleted user.
 
 ### Admin panel
@@ -33,17 +33,16 @@ What the service needs from each system it talks to, and what happens when one i
 
 ### TMail
 
-- Webadmin API ([`TeamMailboxManagementRoutes.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/webadmin/webadmin-team-mailboxes/src/main/java/com/linagora/tmail/webadmin/TeamMailboxManagementRoutes.java#L124-L127)). The service calls:
+- Webadmin API ([`TeamMailboxManagementRoutes.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/webadmin/webadmin-team-mailboxes/src/main/java/com/linagora/tmail/webadmin/TeamMailboxManagementRoutes.java#L156-L176)). The service calls:
   - `GET /domains/{domain}/team-mailboxes`, to see which addresses are taken.
   - `PUT` and `DELETE /domains/{domain}/team-mailboxes/{name}`. A 409 on `PUT` means a user or alias holds the address.
   - `GET /domains/{domain}/team-mailboxes/{name}/members`, and `PUT` (`?role=manager|member`) or `DELETE` on `.../members/{user}`.
   - `GET /domains/{domain}/team-mailboxes/{name}/mailboxes`, to read the root mailbox id.
 - The team mailbox events plugin publishes `team-mailbox.message.received` and `team-mailbox.message.sent` on `tmail` ([`TeamMailboxEventsConfiguration.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/TeamMailboxEventsConfiguration.java#L33-L35)). It declares the `tmail` exchange ([`RabbitMQTeamMailboxEventPublisher.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/RabbitMQTeamMailboxEventPublisher.java#L71)), so TMail with the plugin is deployed before the service.
-- Each webadmin call has a 10 second timeout and no retry of its own.
-  - A timeout, a 401, 403, 408, 429 or a 5xx: the handler is retried, then dead-lettered. A 401 or 403 means the service's password is wrong.
+- Each webadmin call has a 10 second timeout and no retry of its own. By answer:
+  - A timeout, a network error, a 401, 403, 408, 429 or a 5xx: the handler is retried, then dead lettered. A 401 or 403 means `TMAIL_WEBADMIN_PASSWORD` is wrong.
   - A 404: TMail does not have the domain or the team mailbox yet, and the event is parked. Listing or removing the members of a missing team mailbox, and deleting one, are not failures.
   - Any other 4xx dead letters the event at once, since the same call would fail again.
-- A failed mailbox deletion is tried again at the next hourly purge.
 
 ### TwakeSpace
 
@@ -60,12 +59,11 @@ What the service needs from each system it talks to, and what happens when one i
 
 Runtime:
 
-- `@linagora/rabbitmq-client`: connection, reconnects, queue and dead letter declaration, in-process retries.
+- `@linagora/rabbitmq-client`: connection, reconnects, queue and dead letter declaration, in process retries.
 - `drizzle-orm` over `postgres` (postgres.js): queries and migrations.
 - `zod`: configuration and event payload validation.
 - `pino`: JSON logs.
 - `prom-client`: Prometheus metrics.
+- `@sentry/node`: error reports.
 
 Development: TypeScript, `tsx` for `npm run dev`, `vitest` with testcontainers for RabbitMQ and PostgreSQL, `drizzle-kit` to generate migrations, ESLint and Prettier.
-
-The runtime image is Node.js 20 on distroless. See [development](development.md#building-the-image).
