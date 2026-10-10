@@ -54,7 +54,7 @@ CI runs `npm audit --audit-level=high`, then `npm run check`, on every pull requ
 docker build -t twake-mail-side-service:dev .
 ```
 
-The runtime image is `gcr.io/distroless/nodejs20-debian12:nonroot`: no shell, no package manager, no root user.
+The runtime image is `node:24-slim`, run as the `node` user. CI starts it against PostgreSQL and RabbitMQ and waits for `/readyz` before any image is published.
 
 ## Releasing
 
