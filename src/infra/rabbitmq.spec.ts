@@ -40,6 +40,22 @@ describe('createConsumer', () => {
     expect(subscribe.mock.lastCall?.[4]).toMatchObject({ maxRetries: 7, maxRetryDelay: 30_000 });
   });
 
+  it('lets every replica read the queue, each handling up to its prefetch at once', async () => {
+    const consumer = createConsumer({
+      config: { ...config, RABBITMQ_PREFETCH: 4 },
+      logger: silentLogger,
+      handler: vi.fn(),
+    });
+
+    await consumer.start();
+
+    expect(options.last).toMatchObject({ prefetch: 4 });
+    const [, , queue, , subscription] = subscribe.mock.lastCall!;
+    expect(queue).toBe('twake-mail-side-service.v2');
+    expect(subscription.concurrency ?? 4).toBe(4);
+    expect(subscription.queueArguments).not.toHaveProperty('x-single-active-consumer');
+  });
+
   it('reports a subscription lost when a reconnect fails to restore it', () => {
     const onSubscriptionLost = vi.fn();
     const consumer = createConsumer({

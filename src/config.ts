@@ -4,7 +4,7 @@ const positiveInt = z.coerce.number().int().positive();
 
 const envSchema = z.object({
   RABBITMQ_URL: z.string().min(1),
-  RABBITMQ_QUEUE: z.string().default('twake-mail-side-service'),
+  RABBITMQ_QUEUE: z.string().default('twake-mail-side-service.v2'),
   RABBITMQ_SPACE_EXCHANGE: z.string().default('space'),
   RABBITMQ_DNS_EXCHANGE: z.string().default('admin-panel'),
   RABBITMQ_DNS_ROUTING_KEY: z.string().default('dns.validated'),
@@ -14,7 +14,7 @@ const envSchema = z.object({
   RABBITMQ_MAIL_RECEIVED_ROUTING_KEY: z.string().default('team-mailbox.message.received'),
   RABBITMQ_MAIL_SENT_ROUTING_KEY: z.string().default('team-mailbox.message.sent'),
   RABBITMQ_ACTIVITY_EXCHANGE: z.string().default('activity'),
-  RABBITMQ_PREFETCH: positiveInt.default(1),
+  RABBITMQ_PREFETCH: positiveInt.default(4),
   RABBITMQ_MAX_RETRIES: positiveInt.default(8),
   RABBITMQ_RETRY_DELAY: positiveInt.default(1000),
   RABBITMQ_MAX_RETRY_DELAY: positiveInt.default(30_000),

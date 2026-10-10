@@ -6,7 +6,7 @@ What the service needs from each system it talks to, and what happens when one i
 
 ### RabbitMQ
 
-- The service reads one quorum queue, `twake-mail-side-service`, with single active consumer and a delivery limit of 20. It declares the queue, its dead letter exchange `twake-mail-side-service.dlx` and the dead letter queue `twake-mail-side-service.dlq`.
+- The service reads one quorum queue, `twake-mail-side-service.v2`, with a delivery limit of 20, from every replica at once. It declares the queue, its dead letter exchange `twake-mail-side-service.v2.dlx` and the dead letter queue `twake-mail-side-service.v2.dlq`.
 - The four source exchanges (`space`, `admin-panel`, `b2b`, `tmail`) must exist before the service starts: it binds to them without declaring them, so their publishers are deployed first.
 - It publishes on `activity` and, for the startup sync request, on `space`. The client declares an exchange (topic, durable) on its first publish to it, so `activity` is created by the service.
 - When RabbitMQ is unreachable at startup, the client makes 5 connection attempts, then the process exits with code 1. The client reconnects on its own after that; when a reconnect cannot restore the subscription, the process exits with code 1 so that it is restarted.

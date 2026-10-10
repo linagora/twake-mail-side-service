@@ -10,7 +10,7 @@ const baseEnv = {
 describe('loadConfig', () => {
   it('returns defaults for optional fields', () => {
     const cfg = loadConfig(baseEnv);
-    expect(cfg.RABBITMQ_QUEUE).toBe('twake-mail-side-service');
+    expect(cfg.RABBITMQ_QUEUE).toBe('twake-mail-side-service.v2');
     expect(cfg.RABBITMQ_SPACE_EXCHANGE).toBe('space');
     expect(cfg.RABBITMQ_DNS_EXCHANGE).toBe('admin-panel');
     expect(cfg.RABBITMQ_DNS_ROUTING_KEY).toBe('dns.validated');

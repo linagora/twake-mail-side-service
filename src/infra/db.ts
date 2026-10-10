@@ -22,8 +22,8 @@ export interface DbClient {
 
 const MIGRATIONS = fileURLToPath(new URL('../../drizzle', import.meta.url));
 
-export const createDbClient = (databaseUrl: string): DbClient => {
-  const client = postgres(databaseUrl, { max: 5, onnotice: () => {} });
+export const createDbClient = (databaseUrl: string, { max = 5 } = {}): DbClient => {
+  const client = postgres(databaseUrl, { max, onnotice: () => {} });
   const db = drizzle(client, { schema });
 
   // A session lock on a reserved connection, so no transaction stays open while it is held.

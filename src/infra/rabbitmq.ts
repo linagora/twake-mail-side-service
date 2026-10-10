@@ -71,13 +71,8 @@ export const createConsumer = ({
           passiveExchanges: true,
           maxRetries: config.RABBITMQ_MAX_RETRIES,
           maxRetryDelay: config.RABBITMQ_MAX_RETRY_DELAY,
-          // Single active consumer keeps one replica reading, so events stay in publish order.
-          // Both are fixed: RabbitMQ refuses to redeclare a queue with different arguments.
-          queueArguments: {
-            'x-single-active-consumer': true,
-            'x-delivery-limit': 20,
-          },
-          concurrency: 1,
+          // Fixed: RabbitMQ refuses to redeclare a queue with different arguments.
+          queueArguments: { 'x-delivery-limit': 20 },
         },
       );
       subscribed = true;

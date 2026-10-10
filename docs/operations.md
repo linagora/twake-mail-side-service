@@ -5,14 +5,14 @@
 Environment variables, validated at startup. The service exits on an invalid value.
 
 - `RABBITMQ_URL` (required): AMQP URL.
-- `RABBITMQ_QUEUE` (default `twake-mail-side-service`): the queue the service declares and reads.
+- `RABBITMQ_QUEUE` (default `twake-mail-side-service.v2`): the queue the service declares and reads.
 - `RABBITMQ_SPACE_EXCHANGE` (default `space`): the space events, read with `twake.space.#`.
 - `RABBITMQ_DNS_EXCHANGE` (default `admin-panel`) and `RABBITMQ_DNS_ROUTING_KEY` (default `dns.validated`): the DNS validation event. The service provisions an organization's spaces when its `mailDnsConfigurationValidated` is true. Set these to where the admin panel publishes it.
 - `RABBITMQ_USER_DELETED_EXCHANGE` (default `b2b`) and `RABBITMQ_USER_DELETED_ROUTING_KEY` (default `domain.user.deleted`): user deletion.
 - `RABBITMQ_MAIL_EXCHANGE` (default `tmail`), `RABBITMQ_MAIL_RECEIVED_ROUTING_KEY` (default `team-mailbox.message.received`) and `RABBITMQ_MAIL_SENT_ROUTING_KEY` (default `team-mailbox.message.sent`): the TMail plugin's team mail events. Match the plugin's `exchange`, `receivedRoutingKey` and `sentRoutingKey` settings.
-- `RABBITMQ_PREFETCH` (default 1), `RABBITMQ_MAX_RETRIES` (default 8, handler attempts before the dead letter queue), `RABBITMQ_RETRY_DELAY` in ms (default 1000, the first wait), `RABBITMQ_MAX_RETRY_DELAY` in ms (default 30000, the cap of a wait that doubles after each attempt). The defaults ride out about a minute and a half of outage.
+- `RABBITMQ_PREFETCH` (default 4, the events a replica handles at once; its database pool holds twice as many connections plus 8), `RABBITMQ_MAX_RETRIES` (default 8, handler attempts before the dead letter queue), `RABBITMQ_RETRY_DELAY` in ms (default 1000, the first wait), `RABBITMQ_MAX_RETRY_DELAY` in ms (default 30000, the cap of a wait that doubles after each attempt). The defaults ride out about a minute and a half of outage.
 
-The queue's delivery limit (20 broker redeliveries, for example after a crash mid-message) and single active consumer are fixed in code. RabbitMQ refuses to redeclare a queue with different arguments, so change them with a policy.
+The queue's delivery limit (20 broker redeliveries, for example after a crash mid-message) is fixed in code. RabbitMQ refuses to redeclare a queue with different arguments, so change it with a policy.
 
 - `RABBITMQ_ACTIVITY_EXCHANGE` (default `activity`): where the service publishes its `com.twake.mail.*` events.
 - `OUTBOX_INTERVAL_MS` (default 1000): how often the relay looks for pending messages in the outbox. Each run sends everything pending.
@@ -28,7 +28,7 @@ The user in `RABBITMQ_URL` needs:
 
 - `read` on the four source exchanges. They must exist before the service starts, so TMail with its plugin is deployed first.
 - `configure` and `write` on the `space` exchange, to request a sync of every organization when its database holds no space yet. The client declares the exchange on its first publish, which takes `configure` even though it already exists.
-- `configure`, `write` and `read` on the `twake-mail-side-service` queue, its `.dlq` twin and the `twake-mail-side-service.dlx` exchange, which the service declares.
+- `configure`, `write` and `read` on the `twake-mail-side-service.v2` queue, its `.dlq` twin and the `twake-mail-side-service.v2.dlx` exchange, which the service declares.
 - `configure` and `write` on the `activity` exchange, which the service declares (topic, durable) on its first publish.
 
 ## Organizations validated before the first deployment
@@ -63,4 +63,4 @@ The sync makes the mailbox's members those of the space, removing anyone else, a
 - `tmss_parked_events`: events waiting for an object a later event may bring. Zero in steady state.
 - The default Node.js process metrics.
 
-Alert on a growing `twake-mail-side-service.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, and on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.
+Alert on a growing `twake-mail-side-service.v2.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, and on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.

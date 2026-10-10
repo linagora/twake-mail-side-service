@@ -8,7 +8,7 @@ It is a queue consumer with no API of its own: everything it does starts from a 
 
 ```mermaid
 flowchart LR
-  ldap[ldap-rest] -->|space: twake.space.#| q[(twake-mail-side-service queue)]
+  ldap[ldap-rest] -->|space: twake.space.#| q[(twake-mail-side-service.v2 queue)]
   ldap -->|b2b: domain.user.deleted| q
   admin[admin panel] -->|admin-panel: dns.validated| q
   plugin[TMail team mailbox events plugin] -->|tmail: team-mailbox.message.*| q
@@ -71,9 +71,10 @@ sequenceDiagram
 
 ## Ordering and retries
 
-- The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- Each event is handled once. When its handler succeeds, a row of `processed_events` records it, keyed by the AMQP message id (team mail: by team mailbox, message id and direction). A redelivered copy finds the row and is acked untouched. Rows are kept 7 days. Handlers commit each step as they go, so a crash before the row is written runs the handler again, which its idempotent steps allow.
-- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), waiting `RABBITMQ_RETRY_DELAY` after the first and twice as long after each next one, up to `RABBITMQ_MAX_RETRY_DELAY`. Then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
+- Every replica reads the queue, each handling up to `RABBITMQ_PREFETCH` events at once, so events arrive out of order.
+- Order is kept per space. A handler holds a Postgres advisory lock on the space for its whole run, TMail calls included, so two events about one space never run at once. It reads the space once it holds the lock, and skips an event older than the last one applied. An event about many spaces (sync completed, DNS validated, user deleted) takes each space's lock in turn. A lock lives on a connection of its own; transactions stay short and never span a TMail call.
+- Each event is handled once. When its handler succeeds, a row of `processed_events` records it, keyed by the AMQP message id (team mail: by team mailbox, message id and direction). A copy delivered meanwhile to another replica waits on a lock on that key, then finds the row and is acked untouched. Rows are kept 7 days. Handlers commit each step as they go, so a crash before the row is written runs the handler again, which its idempotent steps allow.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), waiting `RABBITMQ_RETRY_DELAY` after the first and twice as long after each next one, up to `RABBITMQ_MAX_RETRY_DELAY`. Then the message goes to the dead letter queue `twake-mail-side-service.v2.dlq`. Nobody replays it, since it could apply an old event over newer ones.
 - What repairs a dead letter depends on the event:
   - Space, member and user deletion events: the next sync of the space.
   - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).
