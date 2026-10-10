@@ -35,6 +35,8 @@ Exchange `tmail`, routing keys `team-mailbox.message.received` and `team-mailbox
 
 ## Published
 
+Every published message is first written to the `outbox` table, in the transaction that stores what it describes, then sent by the relay. A message can go out twice, after a crash between the broker's confirm and the row's deletion, but always under the same id.
+
 ### Activity events
 
 Exchange `activity` (topic, durable, declared on first publish). The routing key is the event type. Events are CloudEvents 1.0:
@@ -51,7 +53,7 @@ Exchange `activity` (topic, durable, declared on first publish). The routing key
 }
 ```
 
-- `com.twake.mail.space.provisioned.v1`: a space's team mailbox is ready. `data` is `{ "space_id", "resource": { "kind": "mailbox", "id" } }`, where `id` is the JMAP id of the team mailbox's root mailbox. The event id is a random uuid.
+- `com.twake.mail.space.provisioned.v1`: a space's team mailbox is ready. `data` is `{ "space_id", "resource": { "kind": "mailbox", "id" } }`, where `id` is the JMAP id of the team mailbox's root mailbox. The event id is `<space id>:<mailbox id>:provisioned`, so a republish keeps it.
 - `com.twake.mail.message.received.v1` and `com.twake.mail.message.sent.v1`: a message reached the team mailbox or its Sent folder. `data` is `{ "object": { "type": "message", "id", "title", "container": { "kind": "mailbox", "id" } } }`. `title` is the subject, or `(no subject)`. `container.id` is the root mailbox id from the provisioned event. The event id is `<mailbox id>:<message id>:<direction>`, so a redelivered message keeps the same id. `time` is the plugin event's timestamp.
 
 ### Sync request

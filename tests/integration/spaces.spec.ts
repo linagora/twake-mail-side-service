@@ -1,17 +1,28 @@
-import { DeadLetterError } from '@linagora/rabbitmq-client';
+import { DeadLetterError, type RabbitMQClient } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
-import type { ActivityPublisher } from '../../src/activity.js';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+  type Mocked,
+} from 'vitest';
+import { createActivity } from '../../src/activity.js';
 import {
   AddressTakenError,
   type TeamMailboxRole,
   type TmailClient,
 } from '../../src/clients/tmail.js';
 import { createDbClient, type DbClient } from '../../src/db.js';
+import { createOutboxRelay } from '../../src/outbox.js';
 import { spaces } from '../../src/schema.js';
 import { createSpaceService } from '../../src/spaces/service.js';
-import { silentLogger } from '../helpers.js';
+import { broker, silentLogger } from '../helpers.js';
 
 const SPACE = '6f1c1f3e-1b7a-4f0e-9a51-0c9f2b7d1a10';
 const OTHER_SPACE = '0b8a6c2e-3d41-4f6a-8e7b-2c5d9f1a4b33';
@@ -80,9 +91,35 @@ const renamed = (name: string, timestamp = '2026-10-06T11:00:00Z') => ({
 let container: StartedPostgreSqlContainer;
 let client: DbClient;
 let tmail: Mocked<TmailClient>;
-let activity: Mocked<ActivityPublisher>;
+let publish: Mock<RabbitMQClient['publish']>;
 
-const service = () => createSpaceService({ db: client.db, tmail, activity, logger: silentLogger });
+const service = () =>
+  createSpaceService({
+    db: client.db,
+    tmail,
+    activity: createActivity('activity'),
+    logger: silentLogger,
+  });
+
+const provisioned = async () => {
+  await createOutboxRelay({ db: client.db, client: broker(publish), logger: silentLogger }).relay();
+  return publish.mock.calls
+    .map(([, , event]) => event as ProvisionedEvent)
+    .filter((event) => event.type === 'com.twake.mail.space.provisioned.v1')
+    .map(({ id, twakeorg, data }) => ({
+      id,
+      organizationId: twakeorg,
+      spaceId: data.space_id,
+      mailboxId: data.resource.id,
+    }));
+};
+
+type ProvisionedEvent = {
+  id: string;
+  type: string;
+  twakeorg: string;
+  data: { space_id: string; resource: { id: string } };
+};
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine').start();
@@ -96,7 +133,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await client.db.execute(sql`TRUNCATE organizations, spaces, space_members CASCADE`);
+  await client.db.execute(sql`TRUNCATE organizations, spaces, space_members, outbox CASCADE`);
   const mailboxes = new Map<string, Map<string, TeamMailboxRole>>();
   const members = (domain: string, name: string) => {
     const key = `${name}@${domain}`;
@@ -118,10 +155,7 @@ beforeEach(async () => {
       members(domain, name).delete(user);
     }),
   };
-  activity = {
-    provisioned: vi.fn().mockResolvedValue(undefined),
-    message: vi.fn().mockResolvedValue(undefined),
-  };
+  publish = vi.fn().mockResolvedValue(undefined);
 });
 
 describe('space service', () => {
@@ -137,11 +171,14 @@ describe('space service', () => {
       ]),
     );
     expect(tmail.addMember).toHaveBeenCalledTimes(2);
-    expect(activity.provisioned).toHaveBeenCalledWith({
-      organizationId: 'acme',
-      spaceId: SPACE,
-      mailboxId: 'id-sales-eu',
-    });
+    expect(await provisioned()).toEqual([
+      {
+        id: `${SPACE}:id-sales-eu:provisioned`,
+        organizationId: 'acme',
+        spaceId: SPACE,
+        mailboxId: 'id-sales-eu',
+      },
+    ]);
     const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
     expect(stored).toMatchObject({ address: 'sales-eu@acme.com', mailboxId: 'id-sales-eu' });
   });
@@ -159,7 +196,7 @@ describe('space service', () => {
     await service().dnsValidated(validated());
     expect(tmail.createTeamMailbox).toHaveBeenCalledWith('acme.com', 'sales-eu');
     expect(tmail.addMember).toHaveBeenCalledWith('acme.com', 'sales-eu', 'al@acme.com', 'member');
-    expect(activity.provisioned).toHaveBeenCalledOnce();
+    expect(await provisioned()).toHaveLength(1);
   });
 
   it('provisions a space once, whatever the number of dns.validated events', async () => {
@@ -168,7 +205,7 @@ describe('space service', () => {
     await service().dnsValidated(validated());
 
     expect(tmail.createTeamMailbox).toHaveBeenCalledOnce();
-    expect(activity.provisioned).toHaveBeenCalledOnce();
+    expect(await provisioned()).toHaveLength(1);
   });
 
   it('adds a number when another space or a TMail user holds the address', async () => {
@@ -181,7 +218,7 @@ describe('space service', () => {
 
     await service().spaceCreated(created());
 
-    expect(activity.provisioned).toHaveBeenLastCalledWith(
+    expect((await provisioned()).at(-1)).toEqual(
       expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu-3' }),
     );
   });
@@ -197,7 +234,7 @@ describe('space service', () => {
       ['acme.com', 'sales-eu'],
       ['acme.com', 'sales-eu'],
     ]);
-    expect(activity.provisioned).toHaveBeenCalledOnce();
+    expect(await provisioned()).toHaveLength(1);
   });
 
   it('picks another address when the stored one was taken in TMail meanwhile', async () => {
@@ -210,7 +247,7 @@ describe('space service', () => {
     });
     await service().spaceCreated(created());
 
-    expect(activity.provisioned).toHaveBeenCalledWith(
+    expect(await provisioned()).toContainEqual(
       expect.objectContaining({ mailboxId: 'id-sales-eu-2' }),
     );
   });
@@ -222,7 +259,7 @@ describe('space service', () => {
     await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
 
     expect(tmail.createTeamMailbox).not.toHaveBeenCalled();
-    expect(activity.provisioned).not.toHaveBeenCalled();
+    expect(await provisioned()).toEqual([]);
     const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
     expect(stored).toMatchObject({ address: null, provisionedAt: null });
   });
@@ -256,7 +293,7 @@ describe('space service', () => {
       { username: 'jane@acme.com', role: 'manager' },
       { username: 'bob@acme.com', role: 'member' },
     ]);
-    expect(activity.provisioned).toHaveBeenCalledWith(
+    expect(await provisioned()).toContainEqual(
       expect.objectContaining({ spaceId: SPACE, mailboxId: 'id-sales-eu' }),
     );
   });
@@ -270,8 +307,8 @@ describe('space service', () => {
 
     await expect(service().dnsValidated(validated())).rejects.toThrow('tmail down');
 
-    expect(activity.provisioned).toHaveBeenCalledOnce();
-    expect(activity.provisioned).toHaveBeenCalledWith(
+    expect(await provisioned()).toHaveLength(1);
+    expect(await provisioned()).toContainEqual(
       expect.objectContaining({ spaceId: OTHER_SPACE, mailboxId: 'id-support' }),
     );
   });
@@ -392,7 +429,7 @@ describe('space service', () => {
 
     await service().spaceCreated(created(OTHER_SPACE));
 
-    expect(activity.provisioned).toHaveBeenLastCalledWith(
+    expect((await provisioned()).at(-1)).toEqual(
       expect.objectContaining({ spaceId: OTHER_SPACE, mailboxId: 'id-sales-eu-2' }),
     );
   });
@@ -487,7 +524,7 @@ describe('space service', () => {
       'jane@acme.com',
       'manager',
     );
-    expect(activity.provisioned).toHaveBeenCalledOnce();
+    expect(await provisioned()).toHaveLength(1);
   });
 
   it('ignores a synced space older than the last event applied', async () => {

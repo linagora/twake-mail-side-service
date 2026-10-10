@@ -6,7 +6,7 @@ export interface Consumer {
   start(): Promise<void>;
   stop(): Promise<void>;
   isReady(): boolean;
-  publisher: Pick<RabbitMQClient, 'publish'>;
+  publisher: Pick<RabbitMQClient, 'publish' | 'isConnected'>;
 }
 
 export interface ConsumerDeps {

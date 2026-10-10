@@ -29,6 +29,13 @@
       "when": 1791317603259,
       "tag": "0003_space_last_event_at",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791634209313,
+      "tag": "0004_outbox",
+      "breakpoints": true
     }
   ]
 }

@@ -47,7 +47,7 @@ One row per space, from its creation until 30 days after its deletion.
 - `name`: the current space name. It only matters until the space is provisioned, since the address is picked from it once.
 - `address`: the team mailbox address, `<name>@<domain>`, lowercased. Unique, so two spaces never get the same one. Set before the mailbox is created in TMail.
 - `mailbox_id`: the JMAP id of the team mailbox's root mailbox, published in the provisioned event.
-- `provisioned_at`: set once the mailbox exists, its members are added and the provisioned event is published. A space with no `provisioned_at` is waiting.
+- `provisioned_at`: set once the mailbox exists and its members are added, in the transaction that writes the provisioned event to the outbox. A space with no `provisioned_at` is waiting.
 - `deleted_at`: set when the space is deleted. The row stays, holding its address, until the purge deletes the mailbox.
 - `last_event_at`: the newest event timestamp applied to the space. Older events are ignored.
 
@@ -66,6 +66,10 @@ stateDiagram-v2
 ## space_members
 
 The members of each live space, with their space role (`viewer`, `editor` or `admin`). A member removal event deletes its rows, and a sync replaces all of a space's rows. Rows are also removed when the space is closed or purged, and when the user is deleted. The index on `user_id` serves user deletion.
+
+## outbox
+
+The messages written but not yet confirmed by the broker: exchange, routing key, message id and body, in `id` order. The relay deletes a row once the broker confirms it, so the table is empty in steady state. Rows that stay mean RabbitMQ is unreachable or refuses them; the relay logs each failure.
 
 ## Migrations
 

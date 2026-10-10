@@ -1,4 +1,14 @@
-import { boolean, index, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 export const organizations = pgTable('organizations', {
   organizationId: text('organization_id').primaryKey(),
@@ -31,3 +41,12 @@ export const spaceMembers = pgTable(
   },
   (t) => [primaryKey({ columns: [t.spaceId, t.userId] }), index().on(t.userId)],
 );
+
+export const outbox = pgTable('outbox', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  exchange: text('exchange').notNull(),
+  routingKey: text('routing_key').notNull(),
+  messageId: text('message_id').notNull(),
+  body: jsonb('body').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

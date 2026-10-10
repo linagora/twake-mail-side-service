@@ -19,6 +19,7 @@ src/
   mailbox/address.ts  Team mailbox name from the space name
   clients/tmail.ts    TMail webadmin client
   activity.ts         Events published on the activity exchange
+  outbox.ts           Outbox writes and the relay that publishes them
   db.ts               drizzle over postgres-js, migrations at startup
   schema.ts           Database tables
   health.ts           /healthz, /readyz, /metrics

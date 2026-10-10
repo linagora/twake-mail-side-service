@@ -1,10 +1,11 @@
 import { DeadLetterError } from '@linagora/rabbitmq-client';
 import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
-import type { ActivityPublisher } from '../activity.js';
+import type { Activity } from '../activity.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../clients/tmail.js';
 import type { Db } from '../db.js';
 import type { Logger } from '../logger.js';
 import { candidateNames, mailboxName } from '../mailbox/address.js';
+import { enqueue } from '../outbox.js';
 import { organizations, spaceMembers, spaces } from '../schema.js';
 import {
   dnsValidated,
@@ -36,7 +37,7 @@ export interface SpaceService {
 interface SpaceServiceDeps {
   db: Db;
   tmail: TmailClient;
-  activity: ActivityPublisher;
+  activity: Activity;
   logger: Logger;
 }
 
@@ -150,11 +151,19 @@ export const createSpaceService = ({
     );
 
     const mailboxId = await tmail.rootMailboxId(domain, name);
-    await activity.provisioned({ organizationId: space.organizationId, spaceId, mailboxId });
-    await db
-      .update(spaces)
-      .set({ mailboxId, provisionedAt: sql`now()` })
-      .where(eq(spaces.spaceId, spaceId));
+    await db.transaction(async (tx) => {
+      // A provisioning that overlaps this one (a consumer failover) found the space waiting too.
+      const updated = await tx
+        .update(spaces)
+        .set({ mailboxId, provisionedAt: sql`now()` })
+        .where(and(eq(spaces.spaceId, spaceId), isNull(spaces.provisionedAt)))
+        .returning({ spaceId: spaces.spaceId });
+      if (!updated.length) return;
+      await enqueue(
+        tx,
+        activity.provisioned({ organizationId: space.organizationId, spaceId, mailboxId }),
+      );
+    });
     logger.info({ spaceId, address, mailboxId }, 'team mailbox provisioned');
   };
 
