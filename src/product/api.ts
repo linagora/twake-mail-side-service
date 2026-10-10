@@ -1,4 +1,10 @@
-import { AddressTakenError, type TeamMailboxRole, type TmailClient, TmailError } from './port.js';
+import {
+  AddressTakenError,
+  type TeamMailboxRole,
+  type TmailClient,
+  TmailError,
+  TmailRejectedError,
+} from './port.js';
 
 export interface TmailOptions {
   baseUrl: string;
@@ -9,7 +15,12 @@ export interface TmailOptions {
 const TIMEOUT_MS = 10_000;
 const MAX_ERROR_BODY = 500;
 
-const isNotFound = (err: unknown) => err instanceof TmailError && err.status === 404;
+const isNotFound = (err: unknown) => err instanceof TmailRejectedError && err.status === 404;
+
+const failure = (status: number, body: string) =>
+  status >= 400 && status < 500 && status !== 429
+    ? new TmailRejectedError(status, body)
+    : new TmailError(status, body);
 
 export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailClient => {
   const root = baseUrl.replace(/\/+$/, '');
@@ -20,7 +31,7 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
       headers: password ? { password } : {},
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!res.ok) throw new TmailError(res.status, (await res.text()).slice(0, MAX_ERROR_BODY));
+    if (!res.ok) throw failure(res.status, (await res.text()).slice(0, MAX_ERROR_BODY));
     return res;
   };
 
@@ -38,7 +49,7 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
       try {
         await call('PUT', teamMailbox(domain, name));
       } catch (err) {
-        if (err instanceof TmailError && err.status === 409) {
+        if (err instanceof TmailRejectedError && err.status === 409) {
           throw new AddressTakenError(err.status, err.body);
         }
         throw err;

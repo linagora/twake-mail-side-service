@@ -2,6 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTmailClient } from './api.js';
+import { RejectedEventError } from '../events/errors.js';
 import { AddressTakenError, TmailError } from './port.js';
 
 interface Recorded {
@@ -140,11 +141,26 @@ describe('createTmailClient', () => {
     });
   });
 
-  it('throws with the status and body on any other failure', async () => {
-    reply = { status: 500, body: 'boom' };
+  it.each([500, 503, 429])('leaves a %i answer to be retried', async (status) => {
+    reply = { status, body: 'boom' };
 
-    await expect(
-      client().addMember('acme.com', 'sales', 'jane@acme.com', 'member'),
-    ).rejects.toMatchObject({ status: 500, body: 'boom' } satisfies Partial<TmailError>);
+    const err = await client()
+      .addMember('acme.com', 'sales', 'jane@acme.com', 'member')
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(TmailError);
+    expect(err).not.toBeInstanceOf(RejectedEventError);
+    expect(err).toMatchObject({ status, body: 'boom' });
+  });
+
+  it.each([400, 403, 404])('refuses for good a %i answer', async (status) => {
+    reply = { status, body: 'no' };
+
+    const err = await client()
+      .addMember('acme.com', 'sales', 'jane@acme.com', 'member')
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RejectedEventError);
+    expect(err).toMatchObject({ status, body: 'no' });
   });
 });

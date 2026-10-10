@@ -1,3 +1,5 @@
+import { RejectedEventError } from '../events/errors.js';
+
 export type TeamMailboxRole = 'manager' | 'member';
 
 export interface TmailClient {
@@ -10,6 +12,7 @@ export interface TmailClient {
   removeMember(domain: string, name: string, user: string): Promise<void>;
 }
 
+// A 429 or 5xx answer: the handler is retried.
 export class TmailError extends Error {
   constructor(
     readonly status: number,
@@ -19,4 +22,14 @@ export class TmailError extends Error {
   }
 }
 
-export class AddressTakenError extends TmailError {}
+// Any other 4xx answer: the same call would fail again.
+export class TmailRejectedError extends RejectedEventError {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`TMail webadmin answered ${status}: ${body}`);
+  }
+}
+
+export class AddressTakenError extends TmailRejectedError {}

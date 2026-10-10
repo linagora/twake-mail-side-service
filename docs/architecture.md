@@ -44,7 +44,7 @@ flowchart TB
 - The router picks the handler from the routing key alone, and records a metric for each attempt.
 - The space service handles space, member, DNS and user events, provisions and closes team mailboxes, and runs the purge. See [team mailboxes](team-mailboxes.md).
 - The mail service turns team mail events into activity events.
-- The TMail client makes one HTTP call per operation, with a 10 second timeout. Retries come from the queue.
+- The TMail client makes one HTTP call per operation, with a 10 second timeout. Retries come from the queue, and only for a timeout, a 429 or a 5xx.
 - State lives in PostgreSQL. See [data model](data-model.md).
 
 ## Startup and shutdown

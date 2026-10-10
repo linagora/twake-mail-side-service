@@ -39,7 +39,7 @@ What the service needs from each system it talks to, and what happens when one i
   - `GET /domains/{domain}/team-mailboxes/{name}/members`, and `PUT` (`?role=manager|member`) or `DELETE` on `.../members/{user}`.
   - `GET /domains/{domain}/team-mailboxes/{name}/mailboxes`, to read the root mailbox id.
 - The team mailbox events plugin publishes `team-mailbox.message.received` and `team-mailbox.message.sent` on `tmail` ([`TeamMailboxEventsConfiguration.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/TeamMailboxEventsConfiguration.java#L33-L35)). It declares the `tmail` exchange ([`RabbitMQTeamMailboxEventPublisher.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/RabbitMQTeamMailboxEventPublisher.java#L71)), so TMail with the plugin is deployed before the service.
-- Each webadmin call has a 10 second timeout and no retry of its own. When TMail is down, the handler is retried, then dead-lettered. A failed mailbox deletion is tried again at the next hourly purge.
+- Each webadmin call has a 10 second timeout and no retry of its own. On a timeout, a 429 or a 5xx the handler is retried, then dead-lettered. Any other 4xx dead letters it at once, since the same call would fail again. A failed mailbox deletion is tried again at the next hourly purge.
 
 ### TwakeSpace
 
