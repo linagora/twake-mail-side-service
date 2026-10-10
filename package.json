@@ -11,7 +11,7 @@
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
     "build": "tsc -p tsconfig.json",
     "format:check": "prettier --check .",
-    "start": "node dist/main.js",
+    "start": "node --import ./dist/instrument.js dist/main.js",
     "dev": "tsx watch src/main.ts",
     "lint": "eslint .",
     "test": "vitest run",
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@linagora/rabbitmq-client": "^0.7.1",
+    "@sentry/node": "^10.75.3",
     "drizzle-orm": "^0.45.3",
     "pino": "^10.4.0",
     "postgres": "^3.4.9",

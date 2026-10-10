@@ -18,4 +18,4 @@ COPY --chown=node:node drizzle ./drizzle
 COPY --from=builder --chown=node:node /app/package.json ./
 USER node
 EXPOSE 8080
-CMD ["node", "dist/main.js"]
+CMD ["node", "--import", "./dist/instrument.js", "dist/main.js"]

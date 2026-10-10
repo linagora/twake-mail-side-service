@@ -21,6 +21,7 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 - `TMAIL_WEBADMIN_URL` (required): TMail's webadmin, for example `http://tmail-admin.tmail.svc.cluster.local:8000`.
 - `TMAIL_WEBADMIN_PASSWORD` (optional): sent as the `Password` header when webadmin asks for one.
 - `LOG_LEVEL` (default `info`), `HEALTH_PORT` (default 8080), `SHUTDOWN_TIMEOUT_MS` (default 10000).
+- `SENTRY_DSN` (optional, secret): where errors are reported, tagged `service` and with the release `twake-mail-side-service@<version>`. Without it, nothing is sent. `SENTRY_ENVIRONMENT` (optional) names the environment.
 
 ## RabbitMQ permissions
 

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as Sentry from '@sentry/node';
 import { loadConfig } from './config.js';
 import { createActivity } from './events/activity.js';
 import { createInbox } from './events/inbox.js';
@@ -96,9 +97,8 @@ const main = async (): Promise<void> => {
       logger.info('no space stored yet, sync of every organization requested');
     }
   } catch (err) {
-    logger.fatal({ err }, 'startup failed');
     await health.stop();
-    process.exit(1);
+    throw err;
   }
 
   outbox.start(config.OUTBOX_INTERVAL_MS);
@@ -136,9 +136,12 @@ const main = async (): Promise<void> => {
       await db.close();
       await health.stop();
       logger.info('shutdown complete');
+      await Sentry.flush(2000);
       process.exit(exitCode);
     } catch (err) {
       logger.error({ err }, 'error during shutdown');
+      Sentry.captureException(err);
+      await Sentry.flush(2000);
       process.exit(1);
     }
   };
@@ -155,7 +158,9 @@ const main = async (): Promise<void> => {
   });
 };
 
-main().catch((err) => {
+main().catch(async (err) => {
   logger.fatal({ err }, 'fatal error during startup');
+  Sentry.captureException(err);
+  await Sentry.flush(2000);
   process.exit(1);
 });
