@@ -79,7 +79,10 @@ describe('mail service', () => {
       mailboxId: 'sales-root-id',
       provisionedAt: new Date(),
     });
-    const handler = createInbox({ db: client.db }).wrap(service().messageAdded, messageKey);
+    const handler = createInbox({ db: client.db, lock: client.withLock }).wrap(
+      service().messageAdded,
+      messageKey,
+    );
     const props = { exchange: 'tmail', routingKey: 'x', headers: {}, messageId: 'same:received' };
 
     await handler(received(), props);

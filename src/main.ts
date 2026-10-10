@@ -20,7 +20,10 @@ const main = async (): Promise<void> => {
   const config = loadConfig();
   logger.level = config.LOG_LEVEL;
 
-  const db = createDbClient(config.DATABASE_URL);
+  // An event in flight holds up to two lock connections (its message, its space). Locks waiting
+  // for a free connection would never see their holder release, so queries, the relay, the
+  // parking and the purge keep connections of their own.
+  const db = createDbClient(config.DATABASE_URL, { max: 2 * config.RABBITMQ_PREFETCH + 8 });
   const metrics = createMetrics({
     outboxPending: () => pendingCount(db.db),
     parked: () => parkedCount(db.db),
@@ -39,6 +42,7 @@ const main = async (): Promise<void> => {
   const outbox = createOutboxRelay({ db: db.db, client: consumer.publisher, logger });
   const spaces = createSpaceService({
     db: db.db,
+    lock: db.withLock,
     tmail: createTmailClient({
       baseUrl: config.TMAIL_WEBADMIN_URL,
       password: config.TMAIL_WEBADMIN_PASSWORD,
@@ -47,7 +51,7 @@ const main = async (): Promise<void> => {
     logger,
   });
   const mail = createMailService({ db: db.db, activity, logger });
-  const inbox = createInbox({ db: db.db });
+  const inbox = createInbox({ db: db.db, lock: db.withLock });
   const once = inbox.wrap;
   const handlers = {
     'twake.space.created': once(spaces.spaceCreated),

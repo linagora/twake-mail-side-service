@@ -6,7 +6,7 @@ Payloads are validated on arrival. Fields not listed here are accepted and ignor
 
 ## Consumed
 
-All of them land on one queue, `twake-mail-side-service`, and the routing key picks the handler. A routing key with no handler is acked and counted as `ignored`.
+All of them land on one queue, `twake-mail-side-service.v2`, and the routing key picks the handler. A routing key with no handler is acked and counted as `ignored`.
 
 An event with a message id is handled once: its id is recorded in `processed_events` after its handler succeeds, and a copy arriving later is acked untouched. The record is written after the handler's own transactions, so a crash in between runs the handler again. That is safe because handlers are idempotent and skip events older than what they already applied.
 

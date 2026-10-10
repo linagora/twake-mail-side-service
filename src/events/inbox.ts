@@ -1,6 +1,6 @@
 import type { RabbitMQMessageHandler, RabbitMQMessageProperties } from '@linagora/rabbitmq-client';
 import { and, eq, lt } from 'drizzle-orm';
-import type { Db } from '../infra/db.js';
+import type { Db, Lock } from '../infra/db.js';
 import { processedEvents } from './schema.js';
 
 // Longer than any redelivery or parking wait, so a duplicate still finds its row.
@@ -21,20 +21,22 @@ export interface Inbox {
 
 // Handlers commit each step as they go, so a crash keeps their progress. The row is written
 // once the handler succeeds: a crash in between runs it again, which its idempotent steps allow.
-export const createInbox = ({ db }: { db: Db }): Inbox => ({
+// The lock makes a copy delivered meanwhile to another replica wait, then find the row.
+export const createInbox = ({ db, lock }: { db: Db; lock: Lock }): Inbox => ({
   wrap:
     (handler, key = byMessageId) =>
     async (message, properties) => {
       const seen = key(message, properties);
-      if (seen) {
+      if (!seen) return handler(message, properties);
+      await lock(`${seen.source}:${seen.id}`, async () => {
         const [done] = await db
           .select({ id: processedEvents.id })
           .from(processedEvents)
           .where(and(eq(processedEvents.source, seen.source), eq(processedEvents.id, seen.id)));
         if (done) return;
-      }
-      await handler(message, properties);
-      if (seen) await db.insert(processedEvents).values(seen).onConflictDoNothing();
+        await handler(message, properties);
+        await db.insert(processedEvents).values(seen).onConflictDoNothing();
+      });
     },
 
   async purge(now = new Date()) {
