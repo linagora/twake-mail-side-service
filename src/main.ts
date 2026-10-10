@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { loadConfig } from './config.js';
 import { createActivity } from './events/activity.js';
+import { createInbox } from './events/inbox.js';
 import { createOutboxRelay, enqueue, pendingCount } from './events/outbox.js';
 import { createParking, parkedCount } from './events/parking.js';
 import { createRouter } from './events/router.js';
@@ -9,7 +10,7 @@ import { createHealthServer } from './infra/health.js';
 import { logger } from './infra/logger.js';
 import { createMetrics } from './infra/metrics.js';
 import { createConsumer } from './infra/rabbitmq.js';
-import { createMailService } from './modules/mail/service.js';
+import { createMailService, messageKey } from './modules/mail/service.js';
 import { createSpaceService } from './modules/spaces/service.js';
 import { createTmailClient } from './product/api.js';
 
@@ -46,19 +47,21 @@ const main = async (): Promise<void> => {
     logger,
   });
   const mail = createMailService({ db: db.db, activity, logger });
+  const inbox = createInbox({ db: db.db });
+  const once = inbox.wrap;
   const handlers = {
-    'twake.space.created': spaces.spaceCreated,
-    'twake.space.synced': spaces.spaceSynced,
-    'twake.space.sync.completed': spaces.syncCompleted,
-    'twake.space.updated': spaces.spaceRenamed,
-    'twake.space.deleted': spaces.spaceDeleted,
-    'twake.space.member.added': spaces.memberAdded,
-    'twake.space.member.removed': spaces.memberRemoved,
-    'twake.space.member.role.changed': spaces.memberRoleChanged,
-    [config.RABBITMQ_DNS_ROUTING_KEY]: spaces.dnsValidated,
-    [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: spaces.userDeleted,
-    [config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY]: mail.messageAdded,
-    [config.RABBITMQ_MAIL_SENT_ROUTING_KEY]: mail.messageAdded,
+    'twake.space.created': once(spaces.spaceCreated),
+    'twake.space.synced': once(spaces.spaceSynced),
+    'twake.space.sync.completed': once(spaces.syncCompleted),
+    'twake.space.updated': once(spaces.spaceRenamed),
+    'twake.space.deleted': once(spaces.spaceDeleted),
+    'twake.space.member.added': once(spaces.memberAdded),
+    'twake.space.member.removed': once(spaces.memberRemoved),
+    'twake.space.member.role.changed': once(spaces.memberRoleChanged),
+    [config.RABBITMQ_DNS_ROUTING_KEY]: once(spaces.dnsValidated),
+    [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: once(spaces.userDeleted),
+    [config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY]: once(mail.messageAdded, messageKey),
+    [config.RABBITMQ_MAIL_SENT_ROUTING_KEY]: once(mail.messageAdded, messageKey),
   };
   const parking = createParking({
     db: db.db,
@@ -97,8 +100,12 @@ const main = async (): Promise<void> => {
   parking.start(config.PARKING_INTERVAL_MS);
 
   // Each run deletes only what is due, so replicas running it at the same time are harmless.
-  const purge = () =>
-    spaces.purgeDeleted().catch((err) => logger.error({ err }, 'purge of deleted spaces failed'));
+  const purge = async () => {
+    await spaces
+      .purgeDeleted()
+      .catch((err) => logger.error({ err }, 'purge of deleted spaces failed'));
+    await inbox.purge().catch((err) => logger.error({ err }, 'purge of the inbox failed'));
+  };
   void purge();
   const purger = setInterval(() => void purge(), PURGE_INTERVAL_MS);
   purger.unref();
