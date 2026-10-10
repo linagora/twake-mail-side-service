@@ -2,7 +2,7 @@ import type { RabbitMQClient } from '@linagora/rabbitmq-client';
 import { asc, count, eq, sql } from 'drizzle-orm';
 import type { Db } from '../infra/db.js';
 import type { Logger } from '../infra/logger.js';
-import { outbox } from '../schema.js';
+import { outbox } from './schema.js';
 
 export interface OutboxMessage {
   exchange: string;

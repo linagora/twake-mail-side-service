@@ -6,8 +6,8 @@ import { createActivity } from '../../events/activity.js';
 import { createOutboxRelay } from '../../events/outbox.js';
 import { NotYetKnownError } from '../../events/parking.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
-import { spaces } from '../../schema.js';
 import { broker, silentLogger } from '../../testing/helpers.js';
+import { spaces } from '../spaces/schema.js';
 import { createMailService } from './service.js';
 
 const received = (teamMailbox = 'product-launch@acme.com') => ({

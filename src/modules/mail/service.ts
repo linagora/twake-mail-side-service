@@ -5,8 +5,8 @@ import { enqueue } from '../../events/outbox.js';
 import { NotYetKnownError } from '../../events/parking.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
-import { spaces } from '../../schema.js';
 import { parseEvent } from '../spaces/events.js';
+import { spaces } from '../spaces/schema.js';
 
 export interface MailService {
   messageAdded(body: unknown): Promise<void>;

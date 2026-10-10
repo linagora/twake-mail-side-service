@@ -16,8 +16,8 @@ import { createActivity } from '../../events/activity.js';
 import { createOutboxRelay } from '../../events/outbox.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/api.js';
-import { spaces } from '../../schema.js';
 import { broker, silentLogger } from '../../testing/helpers.js';
+import { spaces } from './schema.js';
 import { createSpaceService } from './service.js';
 
 const SPACE = '6f1c1f3e-1b7a-4f0e-9a51-0c9f2b7d1a10';

@@ -3,7 +3,10 @@ import { sql } from 'drizzle-orm';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import * as schema from '../schema.js';
+import * as events from '../events/schema.js';
+import * as spaces from '../modules/spaces/schema.js';
+
+const schema = { ...events, ...spaces };
 
 export type Db = PostgresJsDatabase<typeof schema>;
 

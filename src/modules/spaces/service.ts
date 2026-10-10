@@ -5,7 +5,6 @@ import { enqueue } from '../../events/outbox.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/api.js';
-import { organizations, spaceMembers, spaces } from '../../schema.js';
 import { candidateNames, mailboxName } from './address.js';
 import {
   dnsValidated,
@@ -18,6 +17,7 @@ import {
   userDeleted,
   type SpaceRole,
 } from './events.js';
+import { organizations, spaceMembers, spaces } from './schema.js';
 
 export interface SpaceService {
   hasSpaces(): Promise<boolean>;
