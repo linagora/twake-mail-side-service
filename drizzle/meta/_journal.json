@@ -50,6 +50,13 @@
       "when": 1791636999343,
       "tag": "0006_processed_events",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791638489175,
+      "tag": "0007_space_member_events",
+      "breakpoints": true
     }
   ]
 }
