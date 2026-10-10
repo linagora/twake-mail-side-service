@@ -1,4 +1,4 @@
-import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
 export type Outcome = 'handled' | 'ignored' | 'failed';
 
@@ -8,7 +8,7 @@ export interface Metrics {
   observe(event: string, outcome: Outcome, latencyMs: number): void;
 }
 
-export const createMetrics = (): Metrics => {
+export const createMetrics = (outboxPending: () => Promise<number> = async () => 0): Metrics => {
   const registry = new Registry();
   collectDefaultMetrics({ register: registry });
 
@@ -25,6 +25,15 @@ export const createMetrics = (): Metrics => {
     labelNames: ['event', 'outcome'] as const,
     buckets: [0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
     registers: [registry],
+  });
+
+  new Gauge({
+    name: 'tmss_outbox_pending',
+    help: 'Messages written to the outbox and not yet confirmed by the broker',
+    registers: [registry],
+    async collect() {
+      this.set(await outboxPending());
+    },
   });
 
   return {
