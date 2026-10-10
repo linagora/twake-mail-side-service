@@ -106,6 +106,29 @@ describe('createRouter', () => {
     );
   });
 
+  it('knows since when the oldest message in hand was received', async () => {
+    let finish = () => {};
+    const route = createRouter({
+      handlers: {
+        'dns.validated': () => new Promise<void>((resolve) => (finish = resolve)),
+        'twake.space.created': vi.fn().mockResolvedValue(undefined),
+      },
+      park: vi.fn(),
+      logger: silentLogger,
+      metrics: createMetrics(),
+    });
+
+    expect(route.busySince()).toBeUndefined();
+    const before = Date.now();
+    const slow = route({}, props('dns.validated'));
+    await route({}, props('twake.space.created'));
+
+    expect(route.busySince()).toBeGreaterThanOrEqual(before);
+    finish();
+    await slow;
+    expect(route.busySince()).toBeUndefined();
+  });
+
   it('rethrows a handler error so the client retries the message', async () => {
     const metrics = createMetrics();
     const route = createRouter({

@@ -14,7 +14,7 @@ src/
   infra/
     rabbitmq.ts               The queue, its bindings and its arguments
     db.ts                     drizzle over postgres-js, migrations at startup
-    health.ts                 /healthz, /readyz, /metrics
+    health.ts                 /health/live, /health/ready, and /metrics on its own port
     metrics.ts                prom-client registry
     logger.ts                 pino
   product/
@@ -54,7 +54,7 @@ CI runs `npm audit --audit-level=high`, then `npm run check`, on every pull requ
 docker build -t twake-mail-side-service:dev .
 ```
 
-The runtime image is `node:24-slim`, run as the `node` user. CI starts it against PostgreSQL and RabbitMQ and waits for `/readyz` before any image is published.
+The runtime image is `node:24-slim`, run as the `node` user. CI starts it against PostgreSQL and RabbitMQ and waits for `/health/ready` before any image is published.
 
 ## Releasing
 

@@ -15,7 +15,7 @@ What the service needs from each system it talks to, and what happens when one i
 ### PostgreSQL
 
 - The service owns its database and applies its migrations at startup. See [data model](data-model.md).
-- It uses a pool of 5 connections, and `/readyz` answers 503 when the database does not answer.
+- It uses a pool of twice `RABBITMQ_PREFETCH` plus 8 connections, and `/health/ready` answers 503 when the database does not answer.
 - When PostgreSQL is down, every handler fails: messages are retried, then dead-lettered. [Ordering and retries](architecture.md#ordering-and-retries) says what repairs each kind of dead letter.
 
 ## Twake apps

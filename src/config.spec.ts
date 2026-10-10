@@ -23,6 +23,7 @@ describe('loadConfig', () => {
     expect(cfg.TMAIL_WEBADMIN_PASSWORD).toBeUndefined();
     expect(cfg.LOG_LEVEL).toBe('info');
     expect(cfg.HEALTH_PORT).toBe(8080);
+    expect(cfg.METRICS_PORT).toBe(9090);
   });
 
   it('throws when RABBITMQ_URL is missing', () => {

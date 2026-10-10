@@ -78,7 +78,15 @@ const main = async (): Promise<void> => {
     logger,
   });
   const route = createRouter({ handlers, park: parking.park, logger, metrics });
-  const health = createHealthServer({ port: config.HEALTH_PORT, consumer, db, metrics, logger });
+  const health = createHealthServer({
+    port: config.HEALTH_PORT,
+    metricsPort: config.METRICS_PORT,
+    consumer,
+    busySince: route.busySince,
+    db,
+    metrics,
+    logger,
+  });
 
   await health.start();
 

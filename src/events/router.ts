@@ -12,14 +12,16 @@ export interface RouterDeps {
   metrics: Metrics;
 }
 
+export type Router = RabbitMQMessageHandler & {
+  /** When the oldest message still in hand was received. */
+  busySince(): number | undefined;
+};
+
 // One queue is bound to several exchanges, so the routing key alone picks the handler.
-export const createRouter = ({
-  handlers,
-  park,
-  logger,
-  metrics,
-}: RouterDeps): RabbitMQMessageHandler => {
-  return async (message, properties) => {
+export const createRouter = ({ handlers, park, logger, metrics }: RouterDeps): Router => {
+  const inHand = new Set<{ started: number }>();
+
+  const route: RabbitMQMessageHandler = async (message, properties) => {
     const event = properties.routingKey;
     const started = Date.now();
     const handler = handlers[event];
@@ -29,6 +31,8 @@ export const createRouter = ({
       return;
     }
     let outcome: Outcome = 'failed';
+    const handling = { started };
+    inHand.add(handling);
     try {
       await handler(message, properties);
       outcome = 'handled';
@@ -45,7 +49,13 @@ export const createRouter = ({
       await park(message, properties, err);
       outcome = 'parked';
     } finally {
+      inHand.delete(handling);
       metrics.observe(event, outcome, Date.now() - started);
     }
   };
+
+  return Object.assign(route, {
+    // A Set iterates in insertion order, so its first entry is the oldest.
+    busySince: () => inHand.values().next().value?.started,
+  });
 };
