@@ -16,6 +16,8 @@ const props = (messageId?: string) => ({
 let container: StartedPostgreSqlContainer;
 let client: DbClient;
 
+const inbox = () => createInbox({ db: client.db, lock: client.withLock });
+
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine').start();
   client = createDbClient(container.getConnectionUri());
@@ -34,7 +36,7 @@ beforeEach(async () => {
 describe('inbox', () => {
   it('handles a message id once', async () => {
     const handle = vi.fn().mockResolvedValue(undefined);
-    const handler = createInbox({ db: client.db }).wrap(handle);
+    const handler = inbox().wrap(handle);
 
     await handler(body, props('m1'));
     await handler(body, props('m1'));
@@ -43,9 +45,18 @@ describe('inbox', () => {
     expect(handle).toHaveBeenCalledTimes(2);
   });
 
+  it('handles once two copies of a message delivered at the same time', async () => {
+    const handle = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    const handler = inbox().wrap(handle);
+
+    await Promise.all([handler(body, props('m1')), handler(body, props('m1'))]);
+
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
   it('handles once a message by the key its handler gives', async () => {
     const handle = vi.fn().mockResolvedValue(undefined);
-    const handler = createInbox({ db: client.db }).wrap(handle, (message) => ({
+    const handler = inbox().wrap(handle, (message) => ({
       source: 'tmail',
       id: (message as { id: string }).id,
     }));
@@ -59,7 +70,7 @@ describe('inbox', () => {
 
   it('handles a message without an id every time', async () => {
     const handle = vi.fn().mockResolvedValue(undefined);
-    const handler = createInbox({ db: client.db }).wrap(handle);
+    const handler = inbox().wrap(handle);
 
     await handler(body, props());
     await handler(body, props());
@@ -72,7 +83,7 @@ describe('inbox', () => {
       .fn()
       .mockRejectedValueOnce(new Error('tmail down'))
       .mockResolvedValue(undefined);
-    const handler = createInbox({ db: client.db }).wrap(handle);
+    const handler = inbox().wrap(handle);
 
     await expect(handler(body, props('m1'))).rejects.toThrow('tmail down');
     await handler(body, props('m1'));
@@ -82,14 +93,14 @@ describe('inbox', () => {
   });
 
   it('forgets message ids older than the retention', async () => {
-    const inbox = createInbox({ db: client.db });
+    const events = inbox();
     const handle = vi.fn().mockResolvedValue(undefined);
-    await inbox.wrap(handle)(body, props('m1'));
+    await events.wrap(handle)(body, props('m1'));
 
-    await inbox.purge(new Date(Date.now() + 6 * DAY));
-    await inbox.wrap(handle)(body, props('m1'));
-    await inbox.purge(new Date(Date.now() + 8 * DAY));
-    await inbox.wrap(handle)(body, props('m1'));
+    await events.purge(new Date(Date.now() + 6 * DAY));
+    await events.wrap(handle)(body, props('m1'));
+    await events.purge(new Date(Date.now() + 8 * DAY));
+    await events.wrap(handle)(body, props('m1'));
 
     expect(handle).toHaveBeenCalledTimes(2);
   });

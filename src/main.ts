@@ -47,7 +47,7 @@ const main = async (): Promise<void> => {
     logger,
   });
   const mail = createMailService({ db: db.db, activity, logger });
-  const inbox = createInbox({ db: db.db });
+  const inbox = createInbox({ db: db.db, lock: db.withLock });
   const once = inbox.wrap;
   const handlers = {
     'twake.space.created': once(spaces.spaceCreated),
