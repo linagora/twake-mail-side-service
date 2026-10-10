@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20 or newer.
+- Node.js 24 or newer.
 - Docker, for the integration tests (testcontainers).
 
 ## Project layout
@@ -42,14 +42,11 @@ Edit the `schema.ts` of the module or of `events/`, then generate the migration 
 ## Checks
 
 ```sh
-npm run lint
-npm run typecheck
-npm run test:unit
-npm run test:integration  # needs Docker
-npm run build
+npm run check             # lint, format, typecheck, all tests (needs Docker), build
+npm run test:unit         # without Docker
 ```
 
-CI runs lint, typecheck, all tests and the build on every pull request.
+CI runs `npm audit --audit-level=high`, then `npm run check`, on every pull request.
 
 ## Building the image
 
@@ -57,11 +54,11 @@ CI runs lint, typecheck, all tests and the build on every pull request.
 docker build -t twake-mail-side-service:dev .
 ```
 
-The runtime image is `gcr.io/distroless/nodejs20-debian12:nonroot`: no shell, no package manager, no root user.
+The runtime image is `node:24-slim`, run as the `node` user. CI starts it against PostgreSQL and RabbitMQ and waits for `/readyz` before any image is published.
 
 ## Releasing
 
 1. Bump the version in `package.json`.
-2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The release fails when the tag does not match `package.json`.
 
 The release workflow publishes `ghcr.io/<owner>/twake-mail-side-service:vX.Y.Z` and a GitHub release. Every push to `main` publishes `latest`.

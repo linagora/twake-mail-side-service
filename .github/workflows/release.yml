@@ -6,7 +6,15 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
 
 jobs:
+  version:
+    name: Tag matches package.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+
   test:
+    needs: [version]
     name: Build and Test
     uses: ./.github/workflows/build.yml
     secrets: inherit

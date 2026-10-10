@@ -4,38 +4,8 @@ on:
   workflow_call:
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    name: Test
+  check:
+    name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -43,26 +13,51 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - run: npm ci
-      - run: npm test
+      - run: npm audit --audit-level=high
+      - run: npm run check
 
-  build:
-    name: Build
+  image:
+    name: Image smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 2s --health-retries 30
+      rabbitmq:
+        image: rabbitmq:4-management
+        ports: ['5672:5672', '15672:15672']
+        options: --health-cmd "rabbitmq-diagnostics -q ping" --health-interval 5s --health-retries 30
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
+      - run: docker build -t twake-mail-side-service:ci .
 
-      - run: npm ci
-      - run: npm run build
+      # The service only checks that the exchanges owned by others exist.
+      - name: Declare the source exchanges
+        run: |
+          for exchange in space admin-panel b2b tmail activity; do
+            curl -fsS -u guest:guest -X PUT -H 'content-type: application/json' \
+              -d '{"type":"topic","durable":true}' "http://localhost:15672/api/exchanges/%2F/$exchange"
+          done
 
-      - name: Verify build output
-        run: test -f dist/main.js || (echo "dist/main.js not found" && exit 1)
+      - name: Start the image and wait until it is ready
+        run: |
+          docker run -d --name service --network host \
+            -e RABBITMQ_URL=amqp://guest:guest@localhost:5672 \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            -e TMAIL_WEBADMIN_URL=http://localhost:8000 \
+            twake-mail-side-service:ci
+          for attempt in $(seq 30); do
+            curl -fsS localhost:8080/readyz && exit 0
+            sleep 2
+          done
+          docker logs service
+          exit 1

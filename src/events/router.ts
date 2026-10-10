@@ -1,4 +1,5 @@
 import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
+import * as Sentry from '@sentry/node';
 import type { Logger } from '../infra/logger.js';
 import type { Metrics, Outcome } from '../infra/metrics.js';
 import { MalformedEventError, NotYetKnownError } from './errors.js';
@@ -37,7 +38,10 @@ export const createRouter = ({
         outcome = 'dropped';
         return;
       }
-      if (!(err instanceof NotYetKnownError)) throw err;
+      if (!(err instanceof NotYetKnownError)) {
+        Sentry.captureException(err, { tags: { event } });
+        throw err;
+      }
       await park(message, properties, err);
       outcome = 'parked';
     } finally {
