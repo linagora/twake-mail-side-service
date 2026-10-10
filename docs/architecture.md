@@ -77,7 +77,8 @@ sequenceDiagram
   - Space, member and user deletion events: the next sync of the space.
   - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).
   - A team mail event: nothing. That message never shows in the space feed.
-- A malformed event goes straight to the dead letter queue.
+- A malformed event is logged and dropped, since no retry or replay can fix it.
+- An event refused for good, such as a space whose address is a team mailbox no space holds, goes straight to the dead letter queue.
 - An event that needs an object a later event may still bring (mail of a space still being provisioned) is parked: acked and stored in `parked_events`. Every `PARKING_INTERVAL_MS` one replica replays the parked events through their handler. One still not applicable after `PARKING_MAX_WAIT_MS` is published to the dead letter queue, with its original exchange, routing key and last error in the `x-original-exchange`, `x-original-routing-key` and `x-parked-reason` headers.
 - An event about several spaces (a DNS event, the end of a sync) handles each one, then fails if any failed, so the retry only redoes what is left.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.

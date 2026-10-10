@@ -1,6 +1,6 @@
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
-export type Outcome = 'handled' | 'ignored' | 'parked' | 'failed';
+export type Outcome = 'handled' | 'ignored' | 'dropped' | 'parked' | 'failed';
 
 export interface Metrics {
   registry: Registry;

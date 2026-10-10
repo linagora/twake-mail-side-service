@@ -57,7 +57,7 @@ The sync makes the mailbox's members those of the space, removing anyone else, a
 
 ## Metrics
 
-- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is `handled`, `ignored`, `parked` or `failed`.
+- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is `handled`, `ignored`, `dropped` (malformed), `parked` or `failed`.
 - `tmss_message_latency_seconds{event,outcome}`: handling time.
 - `tmss_outbox_pending`: messages written to the outbox and not yet confirmed by RabbitMQ. Zero in steady state.
 - `tmss_parked_events`: events waiting for an object a later event may bring. Zero in steady state.

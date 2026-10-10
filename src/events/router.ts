@@ -1,7 +1,8 @@
 import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import type { Logger } from '../infra/logger.js';
 import type { Metrics, Outcome } from '../infra/metrics.js';
-import { NotYetKnownError, type Parking } from './parking.js';
+import { MalformedEventError, NotYetKnownError } from './errors.js';
+import type { Parking } from './parking.js';
 
 export interface RouterDeps {
   handlers: Record<string, RabbitMQMessageHandler>;
@@ -31,6 +32,11 @@ export const createRouter = ({
       await handler(message, properties);
       outcome = 'handled';
     } catch (err) {
+      if (err instanceof MalformedEventError) {
+        logger.warn({ event, messageId: properties.messageId, err }, 'malformed event dropped');
+        outcome = 'dropped';
+        return;
+      }
       if (!(err instanceof NotYetKnownError)) throw err;
       await park(message, properties, err);
       outcome = 'parked';
