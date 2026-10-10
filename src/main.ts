@@ -47,7 +47,7 @@ const main = async (): Promise<void> => {
     tmail: createTmailClient({
       baseUrl: config.TMAIL_WEBADMIN_URL,
       password: config.TMAIL_WEBADMIN_PASSWORD,
-      onRefused: () => metrics.tmailRefused.inc(),
+      onCall: metrics.observeTmail,
     }),
     activity,
     logger,
