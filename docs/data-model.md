@@ -1,6 +1,6 @@
 # Data model
 
-The service keeps its own state in PostgreSQL, because most events carry only ids: a member event names the space but not its organization's domain, and a deleted user arrives as a bare uuid. The tables are defined in `src/schema.ts`.
+The service keeps its own state in PostgreSQL, because most events carry only ids: a member event names the space but not its organization's domain, and a deleted user arrives as a bare uuid. The tables are defined in `src/modules/spaces/schema.ts` and `src/events/schema.ts`.
 
 ```mermaid
 erDiagram
@@ -77,4 +77,4 @@ The events waiting for an object a later event may bring: their message properti
 
 ## Migrations
 
-Migrations live in `drizzle/` and are generated from `src/schema.ts` with `npm run db:generate`. The service applies them at startup, under a PostgreSQL advisory lock, so replicas starting together do not apply the same one twice. The image ships the `drizzle/` folder next to `dist/`.
+Migrations live in `drizzle/` and are generated from those files with `npm run db:generate`. The service applies them at startup, under a PostgreSQL advisory lock, so replicas starting together do not apply the same one twice. The image ships the `drizzle/` folder next to `dist/`.

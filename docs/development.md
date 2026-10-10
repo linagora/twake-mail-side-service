@@ -9,32 +9,35 @@
 
 ```
 src/
-  index.ts            Entrypoint: config, wiring, health server, graceful shutdown
-  config.ts           Environment parsing with zod
-  consumers/index.ts  The queue, its bindings and its arguments
-  consumers/router.ts Routing key to handler
-  spaces/events.ts    Event payload schemas
-  spaces/service.ts   Provisioning and membership
-  mail/service.ts     Team mail to activity events
-  mailbox/address.ts  Team mailbox name from the space name
-  clients/tmail.ts    TMail webadmin client
-  activity.ts         Events published on the activity exchange
-  outbox.ts           Outbox writes and the relay that publishes them
-  parking.ts          Events that wait for a later one, and their replay
-  db.ts               drizzle over postgres-js, migrations at startup
-  schema.ts           Database tables
-  health.ts           /healthz, /readyz, /metrics
-  metrics.ts          prom-client registry
-  logger.ts           pino
-drizzle/              Generated migrations
-tests/
-  unit/               No Docker
-  integration/        testcontainers: RabbitMQ and PostgreSQL
+  main.ts                     Entrypoint: config, wiring, health server, graceful shutdown
+  config.ts                   Environment parsing with zod
+  infra/
+    rabbitmq.ts               The queue, its bindings and its arguments
+    db.ts                     drizzle over postgres-js, migrations at startup
+    health.ts                 /healthz, /readyz, /metrics
+    metrics.ts                prom-client registry
+    logger.ts                 pino
+  product/
+    port.ts                   The TMail interface the logic depends on
+    api.ts                    Its webadmin adapter
+  events/
+    router.ts                 Routing key to handler
+    activity.ts               Events published on the activity exchange
+    outbox.ts                 Outbox writes and the relay that publishes them
+    parking.ts                Events that wait for a later one, and their replay
+    schema.ts                 The outbox and parked events tables
+  modules/
+    spaces/                   Provisioning and membership: events, service, address, schema
+    mail/                     Team mail to activity events
+  testing/helpers.ts          Shared test helpers
+drizzle/                      Generated migrations
 ```
+
+Tests sit next to the code: `*.spec.ts` need no Docker, `*.int.spec.ts` run RabbitMQ and PostgreSQL in testcontainers.
 
 ## Database changes
 
-Edit `src/schema.ts`, then generate the migration with `npm run db:generate` and commit it with the change.
+Edit the `schema.ts` of the module or of `events/`, then generate the migration with `npm run db:generate` and commit it with the change.
 
 ## Checks
 
