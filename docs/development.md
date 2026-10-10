@@ -20,6 +20,7 @@ src/
   clients/tmail.ts    TMail webadmin client
   activity.ts         Events published on the activity exchange
   outbox.ts           Outbox writes and the relay that publishes them
+  parking.ts          Events that wait for a later one, and their replay
   db.ts               drizzle over postgres-js, migrations at startup
   schema.ts           Database tables
   health.ts           /healthz, /readyz, /metrics

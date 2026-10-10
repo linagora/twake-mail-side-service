@@ -71,6 +71,10 @@ The members of each live space, with their space role (`viewer`, `editor` or `ad
 
 The messages written but not yet confirmed by the broker: exchange, routing key, message id and body, in `id` order. The relay deletes a row once the broker confirms it, so the table is empty in steady state. Rows that stay mean RabbitMQ is unreachable or refuses them; the relay logs each failure.
 
+## parked_events
+
+The events waiting for an object a later event may bring: their message properties, body, the last reason they could not be applied and when they were parked. A row is deleted once its replay succeeds or it goes to the dead letter queue, so the table is empty in steady state.
+
 ## Migrations
 
 Migrations live in `drizzle/` and are generated from `src/schema.ts` with `npm run db:generate`. The service applies them at startup, under a PostgreSQL advisory lock, so replicas starting together do not apply the same one twice. The image ships the `drizzle/` folder next to `dist/`.

@@ -10,6 +10,7 @@ import { logger } from './logger.js';
 import { createMailService } from './mail/service.js';
 import { createMetrics } from './metrics.js';
 import { createOutboxRelay, enqueue, pendingCount } from './outbox.js';
+import { createParking, parkedCount } from './parking.js';
 import { createSpaceService } from './spaces/service.js';
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
@@ -19,7 +20,10 @@ const main = async (): Promise<void> => {
   logger.level = config.LOG_LEVEL;
 
   const db = createDbClient(config.DATABASE_URL);
-  const metrics = createMetrics(() => pendingCount(db.db));
+  const metrics = createMetrics({
+    outboxPending: () => pendingCount(db.db),
+    parked: () => parkedCount(db.db),
+  });
   // The router is built after the consumer, whose client publishes the activity events.
   const consumer = createConsumer({
     config,
@@ -42,24 +46,29 @@ const main = async (): Promise<void> => {
     logger,
   });
   const mail = createMailService({ db: db.db, activity, logger });
-  const route = createRouter({
-    handlers: {
-      'twake.space.created': spaces.spaceCreated,
-      'twake.space.synced': spaces.spaceSynced,
-      'twake.space.sync.completed': spaces.syncCompleted,
-      'twake.space.updated': spaces.spaceRenamed,
-      'twake.space.deleted': spaces.spaceDeleted,
-      'twake.space.member.added': spaces.memberAdded,
-      'twake.space.member.removed': spaces.memberRemoved,
-      'twake.space.member.role.changed': spaces.memberRoleChanged,
-      [config.RABBITMQ_DNS_ROUTING_KEY]: spaces.dnsValidated,
-      [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: spaces.userDeleted,
-      [config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY]: mail.messageAdded,
-      [config.RABBITMQ_MAIL_SENT_ROUTING_KEY]: mail.messageAdded,
-    },
+  const handlers = {
+    'twake.space.created': spaces.spaceCreated,
+    'twake.space.synced': spaces.spaceSynced,
+    'twake.space.sync.completed': spaces.syncCompleted,
+    'twake.space.updated': spaces.spaceRenamed,
+    'twake.space.deleted': spaces.spaceDeleted,
+    'twake.space.member.added': spaces.memberAdded,
+    'twake.space.member.removed': spaces.memberRemoved,
+    'twake.space.member.role.changed': spaces.memberRoleChanged,
+    [config.RABBITMQ_DNS_ROUTING_KEY]: spaces.dnsValidated,
+    [config.RABBITMQ_USER_DELETED_ROUTING_KEY]: spaces.userDeleted,
+    [config.RABBITMQ_MAIL_RECEIVED_ROUTING_KEY]: mail.messageAdded,
+    [config.RABBITMQ_MAIL_SENT_ROUTING_KEY]: mail.messageAdded,
+  };
+  const parking = createParking({
+    db: db.db,
+    client: consumer.publisher,
+    handlers,
+    deadLetterQueue: `${config.RABBITMQ_QUEUE}.dlq`,
+    maxWaitMs: config.PARKING_MAX_WAIT_MS,
     logger,
-    metrics,
   });
+  const route = createRouter({ handlers, park: parking.park, logger, metrics });
   const health = createHealthServer({ port: config.HEALTH_PORT, consumer, db, metrics, logger });
 
   await health.start();
@@ -85,6 +94,7 @@ const main = async (): Promise<void> => {
   }
 
   outbox.start(config.OUTBOX_INTERVAL_MS);
+  parking.start(config.PARKING_INTERVAL_MS);
 
   // Each run deletes only what is due, so replicas running it at the same time are harmless.
   const purge = () =>
@@ -108,6 +118,7 @@ const main = async (): Promise<void> => {
     clearInterval(purger);
     try {
       // Rows a handler writes after this stay in the outbox for the next start.
+      await parking.stop();
       await outbox.stop();
       await consumer.stop();
       await db.close();
