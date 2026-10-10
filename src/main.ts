@@ -39,6 +39,7 @@ const main = async (): Promise<void> => {
   const outbox = createOutboxRelay({ db: db.db, client: consumer.publisher, logger });
   const spaces = createSpaceService({
     db: db.db,
+    lock: db.withLock,
     tmail: createTmailClient({
       baseUrl: config.TMAIL_WEBADMIN_URL,
       password: config.TMAIL_WEBADMIN_PASSWORD,

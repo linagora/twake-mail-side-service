@@ -93,6 +93,7 @@ let publish: Mock<RabbitMQClient['publish']>;
 const service = () =>
   createSpaceService({
     db: client.db,
+    lock: client.withLock,
     tmail,
     activity: createActivity('activity'),
     logger: silentLogger,
@@ -178,6 +179,19 @@ describe('space service', () => {
     ]);
     const [stored] = await client.db.select().from(spaces).where(eq(spaces.spaceId, SPACE));
     expect(stored).toMatchObject({ address: 'sales-eu@acme.com', mailboxId: 'id-sales-eu' });
+  });
+
+  it('provisions a space once when two events about it are handled at the same time', async () => {
+    tmail.createTeamMailbox.mockImplementation(() => new Promise((r) => setTimeout(r, 50)));
+    await service().dnsValidated(validated());
+
+    await Promise.all([
+      service().spaceCreated(created()),
+      service().spaceSynced(synced('2026-10-06T10:00:01Z', created().members)),
+    ]);
+
+    expect(tmail.createTeamMailbox).toHaveBeenCalledTimes(1);
+    expect(await provisioned()).toHaveLength(1);
   });
 
   it('keeps a space waiting until its mail domain is validated', async () => {
@@ -625,6 +639,23 @@ describe('space service', () => {
     const stored = await client.db.select().from(spaces);
     expect(stored.find((s) => s.spaceId === SPACE)?.deletedAt).toBeInstanceOf(Date);
     expect(stored.find((s) => s.spaceId === OTHER_SPACE)?.deletedAt).toBeNull();
+  });
+
+  it('keeps a space newer than the sync while its provisioning waits for a retry', async () => {
+    await service().dnsValidated(validated());
+    tmail.createTeamMailbox.mockRejectedValueOnce(new Error('tmail down'));
+    await expect(
+      service().spaceCreated({ ...created(), timestamp: '2026-10-07T03:00:00Z' }),
+    ).rejects.toThrow('tmail down');
+
+    await service().syncCompleted({
+      organizationId: 'acme',
+      spaceIds: [],
+      timestamp: '2026-10-07T02:00:00Z',
+    });
+
+    const [stored] = await client.db.select().from(spaces);
+    expect(stored?.deletedAt).toBeNull();
   });
 
   it('keeps the spaces a completed sync lists', async () => {
