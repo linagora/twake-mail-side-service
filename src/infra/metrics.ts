@@ -5,6 +5,7 @@ export type Outcome = 'handled' | 'ignored' | 'dropped' | 'parked' | 'failed';
 export interface Metrics {
   registry: Registry;
   messagesProcessed: Counter<'event' | 'outcome'>;
+  tmailRefused: Counter;
   observe(event: string, outcome: Outcome, latencyMs: number): void;
 }
 
@@ -35,6 +36,12 @@ export const createMetrics = ({
     registers: [registry],
   });
 
+  const tmailRefused = new Counter({
+    name: 'tmss_tmail_refused_total',
+    help: 'TMail webadmin answers 401 or 403: the service credentials are wrong',
+    registers: [registry],
+  });
+
   new Gauge({
     name: 'tmss_outbox_pending',
     help: 'Messages written to the outbox and not yet confirmed by the broker',
@@ -56,6 +63,7 @@ export const createMetrics = ({
   return {
     registry,
     messagesProcessed,
+    tmailRefused,
     observe(event, outcome, latencyMs) {
       messagesProcessed.labels(event, outcome).inc();
       messageLatency.labels(event, outcome).observe(latencyMs / 1000);

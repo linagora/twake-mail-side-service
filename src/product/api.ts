@@ -10,6 +10,8 @@ import {
 export interface TmailOptions {
   baseUrl: string;
   password?: string;
+  // Called on a 401 or 403, so an operator is alerted: the retries wait for fixed credentials.
+  onRefused?: () => void;
 }
 
 // One attempt per call: the broker client retries the handler, then dead-letters.
@@ -29,7 +31,11 @@ const failure = (status: number, body: string) => {
     : new TmailError(status, body);
 };
 
-export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailClient => {
+export const createTmailClient = ({
+  baseUrl,
+  password,
+  onRefused = () => {},
+}: TmailOptions): TmailClient => {
   const root = baseUrl.replace(/\/+$/, '');
 
   const call = async (method: 'GET' | 'PUT' | 'DELETE', path: string): Promise<Response> => {
@@ -38,6 +44,7 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
       headers: password ? { password } : {},
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    if (res.status === 401 || res.status === 403) onRefused();
     if (!res.ok) throw failure(res.status, (await res.text()).slice(0, MAX_ERROR_BODY));
     return res;
   };
@@ -92,8 +99,13 @@ export const createTmailClient = ({ baseUrl, password }: TmailOptions): TmailCli
     async addMember(domain, name, user, role) {
       await call('PUT', `${member(domain, name, user)}?role=${role}`);
     },
+    // A missing team mailbox has no members to remove.
     async removeMember(domain, name, user) {
-      await call('DELETE', member(domain, name, user));
+      try {
+        await call('DELETE', member(domain, name, user));
+      } catch (err) {
+        if (!isNotFound(err)) throw err;
+      }
     },
   };
 };

@@ -141,6 +141,14 @@ describe('createTmailClient', () => {
     });
   });
 
+  it('removes no one from a team mailbox TMail does not have', async () => {
+    reply = { status: 404, body: '{"message":"The requested team mailbox does not exists"}' };
+
+    await expect(client().removeMember('acme.com', 'sales', 'jane@acme.com')).resolves.toBe(
+      undefined,
+    );
+  });
+
   it.each([500, 503, 429, 408, 401, 403])('leaves a %i answer to be retried', async (status) => {
     reply = { status, body: 'boom' };
 
@@ -151,6 +159,18 @@ describe('createTmailClient', () => {
     expect(err).toBeInstanceOf(TmailError);
     expect(err).not.toBeInstanceOf(RejectedEventError);
     expect(err).toMatchObject({ status, body: 'boom' });
+  });
+
+  it('reports the credentials TMail refuses, and nothing else', async () => {
+    let refused = 0;
+    const tmail = createTmailClient({ baseUrl, password: 'wrong', onRefused: () => refused++ });
+
+    for (const status of [401, 403, 500, 429]) {
+      reply = { status, body: 'no' };
+      await tmail.removeMember('acme.com', 'sales', 'jane@acme.com').catch(() => {});
+    }
+
+    expect(refused).toBe(2);
   });
 
   it('waits for a domain TMail does not have yet', async () => {

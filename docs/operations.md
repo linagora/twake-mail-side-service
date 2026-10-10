@@ -61,6 +61,7 @@ The sync makes the mailbox's members those of the space, removing anyone else, a
 - `tmss_message_latency_seconds{event,outcome}`: handling time.
 - `tmss_outbox_pending`: messages written to the outbox and not yet confirmed by RabbitMQ. Zero in steady state.
 - `tmss_parked_events`: events waiting for an object a later event may bring. Zero in steady state.
+- `tmss_tmail_refused_total`: TMail webadmin answers 401 or 403, meaning `TMAIL_WEBADMIN_PASSWORD` is wrong. The events are retried, then dead lettered.
 - The default Node.js process metrics.
 
-Alert on a growing `twake-mail-side-service.v2.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, and on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.
+Alert on a growing `twake-mail-side-service.v2.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`, and on any increase of `tmss_tmail_refused_total`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.
