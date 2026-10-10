@@ -4,6 +4,7 @@ import type { Activity } from '../activity.js';
 import type { Db } from '../db.js';
 import type { Logger } from '../logger.js';
 import { enqueue } from '../outbox.js';
+import { NotYetKnownError } from '../parking.js';
 import { spaces } from '../schema.js';
 import { parseEvent } from '../spaces/events.js';
 
@@ -43,9 +44,9 @@ export const createMailService = ({ db, activity, logger }: MailServiceDeps): Ma
       logger.info({ teamMailbox: event.teamMailbox }, 'mail of a team mailbox no space owns');
       return;
     }
-    // Mail can land before the provisioned event is published, and the feed needs that event first, so retry.
+    // Mail can land before the provisioned event is published, and the feed needs that event first.
     if (!space.mailboxId) {
-      throw new Error(`${event.teamMailbox} is still being provisioned`);
+      throw new NotYetKnownError(`${event.teamMailbox} is still being provisioned`);
     }
     await enqueue(
       db,

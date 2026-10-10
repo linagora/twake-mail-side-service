@@ -6,6 +6,7 @@ import { createActivity } from '../../src/activity.js';
 import { createDbClient, type DbClient } from '../../src/db.js';
 import { createMailService } from '../../src/mail/service.js';
 import { createOutboxRelay } from '../../src/outbox.js';
+import { NotYetKnownError } from '../../src/parking.js';
 import { spaces } from '../../src/schema.js';
 import { broker, silentLogger } from '../helpers.js';
 
@@ -114,9 +115,9 @@ describe('mail service', () => {
     expect(await published()).toEqual([]);
   });
 
-  it('retries the mail of a space still being provisioned', async () => {
-    await expect(service().messageAdded(received('waiting@acme.com'))).rejects.toThrow(
-      'waiting@acme.com',
+  it('parks the mail of a space still being provisioned', async () => {
+    await expect(service().messageAdded(received('waiting@acme.com'))).rejects.toBeInstanceOf(
+      NotYetKnownError,
     );
     expect(await published()).toEqual([]);
   });
