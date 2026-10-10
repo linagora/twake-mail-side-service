@@ -43,9 +43,9 @@ export const createOutboxRelay = ({ db, client, logger }: RelayDeps): OutboxRela
   let running: Promise<void> = Promise.resolve();
 
   // The transaction-scoped lock keeps a single replica relaying, so messages go out in id order.
-  // A row is deleted once the broker confirmed it; a failure commits what went out and stops.
-  // One attempt per publish: the next run is the retry, so a broker outage never holds the
-  // transaction open through the client's backoff.
+  // A failed publish commits the deletes of what went out and ends the run; the next run retries.
+  // One attempt per publish, so a broker outage never holds the transaction open through the
+  // client's backoff.
   const relayBatch = () =>
     db.transaction(async (tx) => {
       const [lock] = await tx.execute<{ locked: boolean }>(
