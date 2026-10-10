@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20 or newer.
+- Node.js 24 or newer.
 - Docker, for the integration tests (testcontainers).
 
 ## Project layout
@@ -42,14 +42,11 @@ Edit the `schema.ts` of the module or of `events/`, then generate the migration 
 ## Checks
 
 ```sh
-npm run lint
-npm run typecheck
-npm run test:unit
-npm run test:integration  # needs Docker
-npm run build
+npm run check             # lint, format, typecheck, all tests (needs Docker), build
+npm run test:unit         # without Docker
 ```
 
-CI runs lint, typecheck, all tests and the build on every pull request.
+CI runs `npm audit --audit-level=high`, then `npm run check`, on every pull request.
 
 ## Building the image
 

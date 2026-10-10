@@ -5,10 +5,12 @@
   "description": "Gives each TwakeSpace space a TMail team mailbox, keeps its members in step with the space, and reports the mailbox's mail to the space feed",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
     "build": "tsc -p tsconfig.json",
+    "format:check": "prettier --check .",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "lint": "eslint .",
@@ -30,7 +32,7 @@
     "@eslint/js": "^10.0.1",
     "@testcontainers/postgresql": "^11.0.0",
     "@testcontainers/rabbitmq": "^11.0.0",
-    "@types/node": "^20.19.0",
+    "@types/node": "^24.19.2",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
