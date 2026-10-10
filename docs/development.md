@@ -59,6 +59,6 @@ The runtime image is `node:24-slim`, run as the `node` user. CI starts it agains
 ## Releasing
 
 1. Bump the version in `package.json`.
-2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The release fails when the tag does not match `package.json`.
 
 The release workflow publishes `ghcr.io/<owner>/twake-mail-side-service:vX.Y.Z` and a GitHub release. Every push to `main` publishes `latest`.
