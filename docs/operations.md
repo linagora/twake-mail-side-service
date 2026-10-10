@@ -16,6 +16,7 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 
 - `RABBITMQ_ACTIVITY_EXCHANGE` (default `activity`): where the service publishes its `com.twake.mail.*` events.
 - `OUTBOX_INTERVAL_MS` (default 1000): how often the relay looks for pending messages in the outbox. Each run sends everything pending.
+- `PARKING_INTERVAL_MS` (default 5000): how often parked events are replayed. `PARKING_MAX_WAIT_MS` (default 600000): how long an event stays parked before it goes to the dead letter queue.
 - `DATABASE_URL` (required): PostgreSQL URL. The service applies its migrations at startup.
 - `TMAIL_WEBADMIN_URL` (required): TMail's webadmin, for example `http://tmail-admin.tmail.svc.cluster.local:8000`.
 - `TMAIL_WEBADMIN_PASSWORD` (optional): sent as the `Password` header when webadmin asks for one.
@@ -56,9 +57,10 @@ The sync makes the mailbox's members those of the space, removing anyone else, a
 
 ## Metrics
 
-- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is `handled`, `ignored` or `failed`.
+- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is `handled`, `ignored`, `parked` or `failed`.
 - `tmss_message_latency_seconds{event,outcome}`: handling time.
 - `tmss_outbox_pending`: messages written to the outbox and not yet confirmed by RabbitMQ. Zero in steady state.
+- `tmss_parked_events`: events waiting for an object a later event may bring. Zero in steady state.
 - The default Node.js process metrics.
 
-Alert on a growing `twake-mail-side-service.dlq`, on `outcome="failed"` rising, and on `tmss_outbox_pending` above zero for more than a minute. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.
+Alert on a growing `twake-mail-side-service.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, and on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.

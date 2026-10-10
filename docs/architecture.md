@@ -33,6 +33,10 @@ flowchart TB
   mail --> db
   relay[outbox relay] --> db
   relay --> consumer
+  router -- not yet known --> parking[parking: parked_events]
+  parking -- replay --> spaces
+  parking -- replay --> mail
+  parking -- after the wait --> consumer
 ```
 
 - The consumer declares the queue, binds it to the four source exchanges, and hands each message to the router. Its RabbitMQ connection also publishes what the relay sends.
@@ -57,12 +61,12 @@ sequenceDiagram
   opt no space stored yet
     P->>D: outbox: space, twake.space.sync.requested
   end
-  P->>P: start the outbox relay
+  P->>P: start the outbox relay and the parked events replay
   P->>P: purge deleted spaces, then every hour
 ```
 
 - An invalid configuration, a failed migration or a missing source exchange stops the process with code 1.
-- On SIGTERM or SIGINT, the service stops the relay, stops consuming, closes the database and the health server, and exits. It is forced out after `SHUTDOWN_TIMEOUT_MS`.
+- On SIGTERM or SIGINT, the service stops the parked events replay and the relay, stops consuming, closes the database and the health server, and exits. It is forced out after `SHUTDOWN_TIMEOUT_MS`.
 - An uncaught exception or unhandled rejection shuts it down with code 1.
 
 ## Ordering and retries
@@ -74,6 +78,7 @@ sequenceDiagram
   - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).
   - A team mail event: nothing. That message never shows in the space feed.
 - A malformed event goes straight to the dead letter queue.
+- An event that needs an object a later event may still bring (mail of a space still being provisioned) is parked: acked and stored in `parked_events`. Every `PARKING_INTERVAL_MS` one replica replays the parked events through their handler. One still not applicable after `PARKING_MAX_WAIT_MS` is published to the dead letter queue, with its original exchange, routing key and last error in the `x-original-exchange`, `x-original-routing-key` and `x-parked-reason` headers.
 - An event about several spaces (a DNS event, the end of a sync) handles each one, then fails if any failed, so the retry only redoes what is left.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.
 - After a RabbitMQ reconnect that fails to restore the subscription, the process exits with code 1 so that it is restarted.
