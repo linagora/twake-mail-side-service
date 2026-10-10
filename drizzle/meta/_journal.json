@@ -43,6 +43,13 @@
       "when": 1791635342227,
       "tag": "0005_parked_events",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791636999343,
+      "tag": "0006_processed_events",
+      "breakpoints": true
     }
   ]
 }
