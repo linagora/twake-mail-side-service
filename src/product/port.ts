@@ -12,7 +12,7 @@ export interface TmailClient {
   removeMember(domain: string, name: string, user: string): Promise<void>;
 }
 
-// A 429 or 5xx answer: the handler is retried.
+// A 401, 403, 408, 429 or 5xx answer: the handler is retried.
 export class TmailError extends Error {
   constructor(
     readonly status: number,
@@ -22,7 +22,7 @@ export class TmailError extends Error {
   }
 }
 
-// Any other 4xx answer: the same call would fail again.
+// Any other 4xx answer but 404: the same call would fail again.
 export class TmailRejectedError extends RejectedEventError {
   constructor(
     readonly status: number,
