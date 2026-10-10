@@ -1,9 +1,9 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDbClient, type DbClient } from '../../src/db.js';
-import { createOutboxRelay, enqueue, type OutboxMessage } from '../../src/outbox.js';
-import { broker, silentLogger } from '../helpers.js';
+import { createDbClient, type DbClient } from '../infra/db.js';
+import { broker, silentLogger } from '../testing/helpers.js';
+import { createOutboxRelay, enqueue, type OutboxMessage } from './outbox.js';
 
 const message = (n: number): OutboxMessage => ({
   exchange: 'activity',

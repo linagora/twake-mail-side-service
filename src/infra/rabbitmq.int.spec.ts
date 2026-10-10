@@ -1,9 +1,9 @@
 import { RabbitMQClient, silentLogger } from '@linagora/rabbitmq-client';
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { loadConfig } from '../../src/config.js';
-import { createConsumer, type Consumer } from '../../src/consumers/index.js';
-import { silentLogger as logger } from '../helpers.js';
+import { loadConfig } from '../config.js';
+import { silentLogger as logger } from '../testing/helpers.js';
+import { createConsumer, type Consumer } from './rabbitmq.js';
 
 describe('consumer', () => {
   let container: StartedRabbitMQContainer;

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AddressTakenError, createTmailClient, TmailError } from '../../../src/clients/tmail.js';
+import { AddressTakenError, createTmailClient, TmailError } from './api.js';
 
 interface Recorded {
   method?: string;

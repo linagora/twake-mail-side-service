@@ -1,8 +1,8 @@
 import type { RabbitMQClientOptions } from '@linagora/rabbitmq-client';
 import { describe, expect, it, vi } from 'vitest';
-import { loadConfig } from '../../../src/config.js';
-import { createConsumer } from '../../../src/consumers/index.js';
-import { silentLogger } from '../../helpers.js';
+import { loadConfig } from '../config.js';
+import { silentLogger } from '../testing/helpers.js';
+import { createConsumer } from './rabbitmq.js';
 
 const options = vi.hoisted(() => ({ last: undefined as RabbitMQClientOptions | undefined }));
 

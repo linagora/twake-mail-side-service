@@ -18,4 +18,4 @@ COPY --chown=nonroot:nonroot drizzle ./drizzle
 COPY --from=builder --chown=nonroot:nonroot /app/package.json ./
 USER nonroot
 EXPOSE 8080
-CMD ["dist/index.js"]
+CMD ["dist/main.js"]

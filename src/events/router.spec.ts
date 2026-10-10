@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRouter } from '../../../src/consumers/router.js';
-import { createMetrics } from '../../../src/metrics.js';
-import { NotYetKnownError } from '../../../src/parking.js';
-import { silentLogger } from '../../helpers.js';
+import { createMetrics } from '../infra/metrics.js';
+import { silentLogger } from '../testing/helpers.js';
+import { NotYetKnownError } from './parking.js';
+import { createRouter } from './router.js';
 
 const props = (routingKey: string) => ({ exchange: 'space', routingKey, headers: {} });
 

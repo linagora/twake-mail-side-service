@@ -2,13 +2,13 @@ import { DeadLetterError, type RabbitMQClient } from '@linagora/rabbitmq-client'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { createActivity } from '../../src/activity.js';
-import { createDbClient, type DbClient } from '../../src/db.js';
-import { createMailService } from '../../src/mail/service.js';
-import { createOutboxRelay } from '../../src/outbox.js';
-import { NotYetKnownError } from '../../src/parking.js';
-import { spaces } from '../../src/schema.js';
-import { broker, silentLogger } from '../helpers.js';
+import { createActivity } from '../../events/activity.js';
+import { createOutboxRelay } from '../../events/outbox.js';
+import { NotYetKnownError } from '../../events/parking.js';
+import { createDbClient, type DbClient } from '../../infra/db.js';
+import { spaces } from '../../schema.js';
+import { broker, silentLogger } from '../../testing/helpers.js';
+import { createMailService } from './service.js';
 
 const received = (teamMailbox = 'product-launch@acme.com') => ({
   teamMailbox,

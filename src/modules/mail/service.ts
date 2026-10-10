@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { Activity } from '../activity.js';
-import type { Db } from '../db.js';
-import type { Logger } from '../logger.js';
-import { enqueue } from '../outbox.js';
-import { NotYetKnownError } from '../parking.js';
-import { spaces } from '../schema.js';
+import type { Activity } from '../../events/activity.js';
+import { enqueue } from '../../events/outbox.js';
+import { NotYetKnownError } from '../../events/parking.js';
+import type { Db } from '../../infra/db.js';
+import type { Logger } from '../../infra/logger.js';
+import { spaces } from '../../schema.js';
 import { parseEvent } from '../spaces/events.js';
 
 export interface MailService {

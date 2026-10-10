@@ -1,6 +1,6 @@
 import { RabbitMQClient, type RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import type { Config } from '../config.js';
-import type { Logger } from '../logger.js';
+import type { Logger } from './logger.js';
 
 export interface Consumer {
   start(): Promise<void>;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createHealthServer, type HealthServer } from '../../src/health.js';
-import { createMetrics } from '../../src/metrics.js';
-import { silentLogger as logger } from '../helpers.js';
+import { silentLogger as logger } from '../testing/helpers.js';
+import { createHealthServer, type HealthServer } from './health.js';
+import { createMetrics } from './metrics.js';
 
 let server: HealthServer | undefined;
 let port = 0;

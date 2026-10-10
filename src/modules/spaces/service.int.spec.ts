@@ -12,17 +12,13 @@ import {
   type Mock,
   type Mocked,
 } from 'vitest';
-import { createActivity } from '../../src/activity.js';
-import {
-  AddressTakenError,
-  type TeamMailboxRole,
-  type TmailClient,
-} from '../../src/clients/tmail.js';
-import { createDbClient, type DbClient } from '../../src/db.js';
-import { createOutboxRelay } from '../../src/outbox.js';
-import { spaces } from '../../src/schema.js';
-import { createSpaceService } from '../../src/spaces/service.js';
-import { broker, silentLogger } from '../helpers.js';
+import { createActivity } from '../../events/activity.js';
+import { createOutboxRelay } from '../../events/outbox.js';
+import { createDbClient, type DbClient } from '../../infra/db.js';
+import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/api.js';
+import { spaces } from '../../schema.js';
+import { broker, silentLogger } from '../../testing/helpers.js';
+import { createSpaceService } from './service.js';
 
 const SPACE = '6f1c1f3e-1b7a-4f0e-9a51-0c9f2b7d1a10';
 const OTHER_SPACE = '0b8a6c2e-3d41-4f6a-8e7b-2c5d9f1a4b33';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createActivity } from '../../src/activity.js';
+import { createActivity } from './activity.js';
 
 const activity = createActivity('activity');
 

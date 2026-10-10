@@ -4,9 +4,9 @@ import {
   type RabbitMQMessageHandler,
 } from '@linagora/rabbitmq-client';
 import { asc, count, eq, sql } from 'drizzle-orm';
-import type { Db } from './db.js';
-import type { Logger } from './logger.js';
-import { parkedEvents } from './schema.js';
+import type { Db } from '../infra/db.js';
+import type { Logger } from '../infra/logger.js';
+import { parkedEvents } from '../schema.js';
 
 // Thrown by a handler when the event needs an object a later event may still bring.
 export class NotYetKnownError extends Error {

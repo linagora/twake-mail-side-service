@@ -1,12 +1,12 @@
 import { DeadLetterError } from '@linagora/rabbitmq-client';
 import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
-import type { Activity } from '../activity.js';
-import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../clients/tmail.js';
-import type { Db } from '../db.js';
-import type { Logger } from '../logger.js';
-import { candidateNames, mailboxName } from '../mailbox/address.js';
-import { enqueue } from '../outbox.js';
-import { organizations, spaceMembers, spaces } from '../schema.js';
+import type { Activity } from '../../events/activity.js';
+import { enqueue } from '../../events/outbox.js';
+import type { Db } from '../../infra/db.js';
+import type { Logger } from '../../infra/logger.js';
+import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/api.js';
+import { organizations, spaceMembers, spaces } from '../../schema.js';
+import { candidateNames, mailboxName } from './address.js';
 import {
   dnsValidated,
   memberChanged,

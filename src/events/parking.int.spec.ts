@@ -2,9 +2,9 @@ import { DeadLetterError, type RabbitMQMessageHandler } from '@linagora/rabbitmq
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { createDbClient, type DbClient } from '../../src/db.js';
-import { createParking, NotYetKnownError, parkedCount } from '../../src/parking.js';
-import { broker, silentLogger } from '../helpers.js';
+import { createDbClient, type DbClient } from '../infra/db.js';
+import { broker, silentLogger } from '../testing/helpers.js';
+import { createParking, NotYetKnownError, parkedCount } from './parking.js';
 
 const MINUTE = 60_000;
 const body = { teamMailbox: 'sales@acme.com', messageId: 'm1' };

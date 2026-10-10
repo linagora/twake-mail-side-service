@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { createActivity } from './activity.js';
-import { createTmailClient } from './clients/tmail.js';
 import { loadConfig } from './config.js';
-import { createConsumer } from './consumers/index.js';
-import { createRouter } from './consumers/router.js';
-import { createDbClient } from './db.js';
-import { createHealthServer } from './health.js';
-import { logger } from './logger.js';
-import { createMailService } from './mail/service.js';
-import { createMetrics } from './metrics.js';
-import { createOutboxRelay, enqueue, pendingCount } from './outbox.js';
-import { createParking, parkedCount } from './parking.js';
-import { createSpaceService } from './spaces/service.js';
+import { createActivity } from './events/activity.js';
+import { createOutboxRelay, enqueue, pendingCount } from './events/outbox.js';
+import { createParking, parkedCount } from './events/parking.js';
+import { createRouter } from './events/router.js';
+import { createDbClient } from './infra/db.js';
+import { createHealthServer } from './infra/health.js';
+import { logger } from './infra/logger.js';
+import { createMetrics } from './infra/metrics.js';
+import { createConsumer } from './infra/rabbitmq.js';
+import { createMailService } from './modules/mail/service.js';
+import { createSpaceService } from './modules/spaces/service.js';
+import { createTmailClient } from './product/api.js';
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 

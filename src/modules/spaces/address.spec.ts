@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candidateNames, mailboxName } from '../../../src/mailbox/address.js';
+import { candidateNames, mailboxName } from './address.js';
 
 describe('mailboxName', () => {
   it.each([

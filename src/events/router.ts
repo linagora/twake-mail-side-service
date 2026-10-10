@@ -1,7 +1,7 @@
 import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
-import type { Logger } from '../logger.js';
-import type { Metrics, Outcome } from '../metrics.js';
-import { NotYetKnownError, type Parking } from '../parking.js';
+import type { Logger } from '../infra/logger.js';
+import type { Metrics, Outcome } from '../infra/metrics.js';
+import { NotYetKnownError, type Parking } from './parking.js';
 
 export interface RouterDeps {
   handlers: Record<string, RabbitMQMessageHandler>;
