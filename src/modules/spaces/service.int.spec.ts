@@ -394,7 +394,9 @@ describe('space service', () => {
   it('gives a waiting space the address of its new name', async () => {
     await service().spaceCreated(created());
     await service().spaceRenamed(renamed('Sales World'));
-    await service().spaceRenamed(renamed('Sales Old', '2026-10-06T10:30:00Z'));
+    await expect(
+      service().spaceRenamed(renamed('Sales Old', '2026-10-06T10:30:00Z')),
+    ).resolves.toBe('stale');
     await service().dnsValidated(validated());
 
     expect(tmail.createTeamMailbox).toHaveBeenCalledWith('acme.com', 'sales-world');
@@ -709,7 +711,9 @@ describe('space service', () => {
     await service().spaceCreated(created());
 
     await service().memberRemoved(memberEvent(BOB, 'bob@acme.com', 'editor'));
-    await service().memberAdded(memberEvent(BOB, 'bob@acme.com', 'editor', '2026-10-06T10:30:00Z'));
+    await expect(
+      service().memberAdded(memberEvent(BOB, 'bob@acme.com', 'editor', '2026-10-06T10:30:00Z')),
+    ).resolves.toBe('stale');
     await service().spaceSynced(synced('2026-10-06T10:45:00Z', created().members));
 
     expect(await tmail.listMembers('acme.com', 'sales-eu')).not.toContainEqual(

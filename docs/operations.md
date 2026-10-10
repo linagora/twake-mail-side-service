@@ -20,7 +20,7 @@ The queue's delivery limit (20 broker redeliveries, for example after a crash mi
 - `DATABASE_URL` (required): PostgreSQL URL. The service applies its migrations at startup.
 - `TMAIL_WEBADMIN_URL` (required): TMail's webadmin, for example `http://tmail-admin.tmail.svc.cluster.local:8000`.
 - `TMAIL_WEBADMIN_PASSWORD` (optional): sent as the `Password` header when webadmin asks for one.
-- `LOG_LEVEL` (default `info`), `HEALTH_PORT` (default 8080), `SHUTDOWN_TIMEOUT_MS` (default 10000).
+- `LOG_LEVEL` (default `info`), `HEALTH_PORT` (default 8080, the probes), `METRICS_PORT` (default 9090), `SHUTDOWN_TIMEOUT_MS` (default 10000).
 - `SENTRY_DSN` (optional, secret): where errors are reported, tagged `service` and with the release `twake-mail-side-service@<version>`. Without it, nothing is sent. `SENTRY_ENVIRONMENT` (optional) names the environment.
 
 ## RabbitMQ permissions
@@ -52,17 +52,30 @@ The sync makes the mailbox's members those of the space, removing anyone else, a
 
 ## Endpoints
 
-- `GET /healthz`: the process is alive.
-- `GET /readyz`: the consumer is subscribed and PostgreSQL answers. 503 with a `reason` otherwise.
+On `HEALTH_PORT`:
+
+- `GET /health/live`: 503 with a `reason` when the consumer has been disconnected for over a minute (`consumer_disconnected`), or has held one message for over ten minutes (`consumer_stuck`). Restart the pod then.
+- `GET /health/ready`: the consumer is subscribed and PostgreSQL answers. 503 with a `reason` otherwise.
+
+On `METRICS_PORT`:
+
 - `GET /metrics`: Prometheus metrics.
 
 ## Metrics
 
-- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is `handled`, `ignored`, `dropped` (malformed), `parked` or `failed`.
+- `tmss_messages_processed_total{event,outcome}`: one per handler attempt. `event` is the routing key, `outcome` is one of:
+  - `handled`.
+  - `duplicate`: a copy of a message already handled.
+  - `stale`: older than what the space or member already has, or about a deleted space.
+  - `unrouted`: no handler for the routing key.
+  - `parked`: waiting for an object a later event may bring.
+  - `dead_lettered`: refused for good, sent to the dead letter queue at once.
+  - `dropped`: malformed.
+  - `failed`: retried. The last attempt goes to the dead letter queue.
 - `tmss_message_latency_seconds{event,outcome}`: handling time.
 - `tmss_outbox_pending`: messages written to the outbox and not yet confirmed by RabbitMQ. Zero in steady state.
 - `tmss_parked_events`: events waiting for an object a later event may bring. Zero in steady state.
-- `tmss_tmail_refused_total`: TMail webadmin answers 401 or 403, meaning `TMAIL_WEBADMIN_PASSWORD` is wrong. The events are retried, then dead lettered.
+- `tmss_tmail_request_seconds{operation,result}`: TMail webadmin calls. `operation` is the client method (`createTeamMailbox`, `addMember`...), `result` the HTTP status, `timeout` or `error`. A 401 or 403 means `TMAIL_WEBADMIN_PASSWORD` is wrong: the events are retried, then dead lettered.
 - The default Node.js process metrics.
 
-Alert on a growing `twake-mail-side-service.v2.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`, and on any increase of `tmss_tmail_refused_total`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.
+Alert on a growing `twake-mail-side-service.v2.dlq`, on `outcome="failed"` rising, on `tmss_outbox_pending` above zero for more than a minute, on `tmss_parked_events` above zero for longer than `PARKING_MAX_WAIT_MS`, and on any TMail call with `result=~"401|403"`. The relay sends the outbox in order and stops at the first message the broker refuses, so one message it can never publish (for example on an exchange the service may not write to) holds back every event after it. Its logs name that message.

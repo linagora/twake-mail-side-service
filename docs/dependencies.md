@@ -15,7 +15,7 @@ What the service needs from each system it talks to, and what happens when one i
 ### PostgreSQL
 
 - The service owns its database and applies its migrations at startup. See [data model](data-model.md).
-- It uses a pool of 5 connections, and `/readyz` answers 503 when the database does not answer.
+- It uses a pool of twice `RABBITMQ_PREFETCH` plus 8 connections, and `/health/ready` answers 503 when the database does not answer.
 - When PostgreSQL is down, every handler fails: messages are retried, then dead-lettered. [Ordering and retries](architecture.md#ordering-and-retries) says what repairs each kind of dead letter.
 
 ## Twake apps
@@ -40,7 +40,7 @@ What the service needs from each system it talks to, and what happens when one i
   - `GET /domains/{domain}/team-mailboxes/{name}/mailboxes`, to read the root mailbox id.
 - The team mailbox events plugin publishes `team-mailbox.message.received` and `team-mailbox.message.sent` on `tmail` ([`TeamMailboxEventsConfiguration.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/TeamMailboxEventsConfiguration.java#L33-L35)). It declares the `tmail` exchange ([`RabbitMQTeamMailboxEventPublisher.java`](https://github.com/linagora/tmail-backend/blob/fba0f98c599f182cde7ab6e8282f6d1a6256ae3f/tmail-backend/mailbox/plugin/team-mailbox-events/src/main/java/com/linagora/tmail/team/events/RabbitMQTeamMailboxEventPublisher.java#L71)), so TMail with the plugin is deployed before the service.
 - Each webadmin call has a 10 second timeout and no retry of its own.
-  - A timeout, a 401, 403, 408, 429 or a 5xx: the handler is retried, then dead-lettered. A 401 or 403 means the service's password is wrong, and counts in `tmss_tmail_refused_total`.
+  - A timeout, a 401, 403, 408, 429 or a 5xx: the handler is retried, then dead-lettered. A 401 or 403 means the service's password is wrong.
   - A 404: TMail does not have the domain or the team mailbox yet, and the event is parked. Listing or removing the members of a missing team mailbox, and deleting one, are not failures.
   - Any other 4xx dead letters the event at once, since the same call would fail again.
 - A failed mailbox deletion is tried again at the next hourly purge.

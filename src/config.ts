@@ -29,6 +29,7 @@ const envSchema = z.object({
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   HEALTH_PORT: positiveInt.default(8080),
+  METRICS_PORT: positiveInt.default(9090),
   SHUTDOWN_TIMEOUT_MS: positiveInt.default(10_000),
 });
 

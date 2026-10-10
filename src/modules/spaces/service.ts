@@ -22,15 +22,15 @@ import { organizations, spaceMembers, spaces } from './schema.js';
 
 export interface SpaceService {
   hasSpaces(): Promise<boolean>;
-  spaceCreated(body: unknown): Promise<void>;
-  spaceSynced(body: unknown): Promise<void>;
+  spaceCreated(body: unknown): Promise<'stale' | void>;
+  spaceSynced(body: unknown): Promise<'stale' | void>;
   syncCompleted(body: unknown): Promise<void>;
-  spaceRenamed(body: unknown): Promise<void>;
+  spaceRenamed(body: unknown): Promise<'stale' | void>;
   spaceDeleted(body: unknown): Promise<void>;
   purgeDeleted(now?: Date): Promise<void>;
-  memberAdded(body: unknown): Promise<void>;
-  memberRoleChanged(body: unknown): Promise<void>;
-  memberRemoved(body: unknown): Promise<void>;
+  memberAdded(body: unknown): Promise<'stale' | void>;
+  memberRoleChanged(body: unknown): Promise<'stale' | void>;
+  memberRemoved(body: unknown): Promise<'stale' | void>;
   dnsValidated(body: unknown): Promise<void>;
   userDeleted(body: unknown): Promise<void>;
 }
@@ -278,16 +278,19 @@ export const createSpaceService = ({
 
   const onMember = (removed: boolean) => async (body: unknown) => {
     const event = parseEvent(memberChanged, body);
-    await locked(event.id, async () => {
+    return locked(event.id, async () => {
       const space = await findSpace(event.id);
       if (!space) throw new NotYetKnownError(`space ${event.id} is not known yet`);
-      if (space.deletedAt) return;
+      if (space.deletedAt) return 'stale';
+      let stale = event.members.length > 0;
       for (const member of event.members) {
         if (!(await storeMember(db, event.id, member, removed, event.timestamp))) continue;
+        stale = false;
         if (space.provisionedAt) {
           await syncMember(space.address, member.email, removed ? undefined : member.role);
         }
       }
+      if (stale) return 'stale';
     });
   };
 
@@ -299,9 +302,9 @@ export const createSpaceService = ({
 
     async spaceCreated(body) {
       const event = parseEvent(spaceCreated, body);
-      await locked(event.id, async () => {
+      return locked(event.id, async () => {
         const space = await findSpace(event.id);
-        if (space?.deletedAt || isStale(space, event.timestamp)) return;
+        if (space?.deletedAt || isStale(space, event.timestamp)) return 'stale';
         await db.transaction(async (tx) => {
           await tx
             .insert(spaces)
@@ -331,9 +334,9 @@ export const createSpaceService = ({
 
     async spaceSynced(body) {
       const event = parseEvent(spaceCreated, body);
-      await locked(event.id, async () => {
+      return locked(event.id, async () => {
         const space = await findSpace(event.id);
-        if (space?.deletedAt || isStale(space, event.timestamp)) return;
+        if (space?.deletedAt || isStale(space, event.timestamp)) return 'stale';
         await db.transaction(async (tx) => {
           await tx
             .insert(spaces)
@@ -391,10 +394,10 @@ export const createSpaceService = ({
     // The address is picked at provisioning, so a rename only matters to a space still waiting.
     async spaceRenamed(body) {
       const event = parseEvent(spaceRenamed, body);
-      await locked(event.id, async () => {
+      return locked(event.id, async () => {
         const space = await findSpace(event.id);
         if (!space) throw new NotYetKnownError(`space ${event.id} is not known yet`);
-        if (space.deletedAt || isStale(space, event.timestamp)) return;
+        if (space.deletedAt || isStale(space, event.timestamp)) return 'stale';
         await db.update(spaces).set({ name: event.name }).where(eq(spaces.spaceId, event.id));
         await applied(event.id, event.timestamp);
       });

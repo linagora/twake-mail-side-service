@@ -10,9 +10,11 @@ import {
 export interface TmailOptions {
   baseUrl: string;
   password?: string;
-  // Called on a 401 or 403, so an operator is alerted: the retries wait for fixed credentials.
-  onRefused?: () => void;
+  /** Each call's result: the HTTP status, `timeout` or `error`. */
+  onCall?: (operation: string, result: string, durationMs: number) => void;
 }
+
+type Operation = keyof TmailClient;
 
 // One attempt per call: the broker client retries the handler, then dead-letters.
 const TIMEOUT_MS = 10_000;
@@ -34,17 +36,29 @@ const failure = (status: number, body: string) => {
 export const createTmailClient = ({
   baseUrl,
   password,
-  onRefused = () => {},
+  onCall = () => {},
 }: TmailOptions): TmailClient => {
   const root = baseUrl.replace(/\/+$/, '');
 
-  const call = async (method: 'GET' | 'PUT' | 'DELETE', path: string): Promise<Response> => {
-    const res = await fetch(root + path, {
-      method,
-      headers: password ? { password } : {},
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (res.status === 401 || res.status === 403) onRefused();
+  const call = async (
+    operation: Operation,
+    method: 'GET' | 'PUT' | 'DELETE',
+    path: string,
+  ): Promise<Response> => {
+    const started = Date.now();
+    let res: Response;
+    try {
+      res = await fetch(root + path, {
+        method,
+        headers: password ? { password } : {},
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (err) {
+      const timedOut = err instanceof Error && err.name === 'TimeoutError';
+      onCall(operation, timedOut ? 'timeout' : 'error', Date.now() - started);
+      throw err;
+    }
+    onCall(operation, String(res.status), Date.now() - started);
     if (!res.ok) throw failure(res.status, (await res.text()).slice(0, MAX_ERROR_BODY));
     return res;
   };
@@ -56,12 +70,16 @@ export const createTmailClient = ({
 
   return {
     async listTeamMailboxes(domain) {
-      const res = await call('GET', `/domains/${encodeURIComponent(domain)}/team-mailboxes`);
+      const res = await call(
+        'listTeamMailboxes',
+        'GET',
+        `/domains/${encodeURIComponent(domain)}/team-mailboxes`,
+      );
       return ((await res.json()) as { name: string }[]).map((m) => m.name);
     },
     async createTeamMailbox(domain, name) {
       try {
-        await call('PUT', teamMailbox(domain, name));
+        await call('createTeamMailbox', 'PUT', teamMailbox(domain, name));
       } catch (err) {
         if (err instanceof TmailRejectedError && err.status === 409) {
           throw new AddressTakenError(err.status, err.body);
@@ -72,14 +90,14 @@ export const createTmailClient = ({
     // 404 means the domain is gone, and its team mailboxes with it.
     async deleteTeamMailbox(domain, name) {
       try {
-        await call('DELETE', teamMailbox(domain, name));
+        await call('deleteTeamMailbox', 'DELETE', teamMailbox(domain, name));
       } catch (err) {
         if (!isNotFound(err)) throw err;
       }
     },
     // The root is listed under the team name itself, its folders (INBOX, Sent...) under theirs.
     async rootMailboxId(domain, name) {
-      const res = await call('GET', `${teamMailbox(domain, name)}/mailboxes`);
+      const res = await call('rootMailboxId', 'GET', `${teamMailbox(domain, name)}/mailboxes`);
       const folders = (await res.json()) as { mailboxName?: unknown; mailboxId?: unknown }[];
       const root = folders.find((f) => f.mailboxName === name);
       if (typeof root?.mailboxId !== 'string' || !root.mailboxId) {
@@ -89,7 +107,7 @@ export const createTmailClient = ({
     },
     async listMembers(domain, name) {
       try {
-        const res = await call('GET', `${teamMailbox(domain, name)}/members`);
+        const res = await call('listMembers', 'GET', `${teamMailbox(domain, name)}/members`);
         return (await res.json()) as { username: string; role: TeamMailboxRole }[];
       } catch (err) {
         if (isNotFound(err)) return [];
@@ -97,12 +115,12 @@ export const createTmailClient = ({
       }
     },
     async addMember(domain, name, user, role) {
-      await call('PUT', `${member(domain, name, user)}?role=${role}`);
+      await call('addMember', 'PUT', `${member(domain, name, user)}?role=${role}`);
     },
     // A missing team mailbox has no members to remove.
     async removeMember(domain, name, user) {
       try {
-        await call('DELETE', member(domain, name, user));
+        await call('removeMember', 'DELETE', member(domain, name, user));
       } catch (err) {
         if (!isNotFound(err)) throw err;
       }

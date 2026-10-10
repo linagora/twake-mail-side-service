@@ -1,12 +1,20 @@
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
-export type Outcome = 'handled' | 'ignored' | 'dropped' | 'parked' | 'failed';
+export type Outcome =
+  | 'handled'
+  | 'duplicate'
+  | 'stale'
+  | 'unrouted'
+  | 'parked'
+  | 'dead_lettered'
+  | 'dropped'
+  | 'failed';
 
 export interface Metrics {
   registry: Registry;
   messagesProcessed: Counter<'event' | 'outcome'>;
-  tmailRefused: Counter;
   observe(event: string, outcome: Outcome, latencyMs: number): void;
+  observeTmail(operation: string, result: string, durationMs: number): void;
 }
 
 interface Counts {
@@ -36,9 +44,11 @@ export const createMetrics = ({
     registers: [registry],
   });
 
-  const tmailRefused = new Counter({
-    name: 'tmss_tmail_refused_total',
-    help: 'TMail webadmin answers 401 or 403: the service credentials are wrong',
+  const tmailCalls = new Histogram({
+    name: 'tmss_tmail_request_seconds',
+    help: 'TMail webadmin calls in seconds, by operation and result (HTTP status, timeout or error)',
+    labelNames: ['operation', 'result'] as const,
+    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
     registers: [registry],
   });
 
@@ -63,10 +73,12 @@ export const createMetrics = ({
   return {
     registry,
     messagesProcessed,
-    tmailRefused,
     observe(event, outcome, latencyMs) {
       messagesProcessed.labels(event, outcome).inc();
       messageLatency.labels(event, outcome).observe(latencyMs / 1000);
+    },
+    observeTmail(operation, result, durationMs) {
+      tmailCalls.labels(operation, result).observe(durationMs / 1000);
     },
   };
 };

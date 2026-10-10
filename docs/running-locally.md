@@ -26,7 +26,7 @@ npm run dev
 
 `TMAIL_WEBADMIN_URL` is required. The service starts without a TMail behind it, but provisioning then fails; port-forward a real TMail webadmin to test it (add `TMAIL_WEBADMIN_PASSWORD` when it asks for one).
 
-`curl localhost:8080/readyz` answers `{"status":"ready"}` once the queue is bound. Publish a test space, then validate its organization's mail domain:
+`curl localhost:8080/health/ready` answers `{"status":"ready"}` once the queue is bound. Publish a test space, then validate its organization's mail domain:
 
 ```sh
 docker exec tmss-rabbitmq rabbitmqadmin publish --exchange space --routing-key twake.space.created \

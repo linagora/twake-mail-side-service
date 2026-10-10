@@ -161,16 +161,25 @@ describe('createTmailClient', () => {
     expect(err).toMatchObject({ status, body: 'boom' });
   });
 
-  it('reports the credentials TMail refuses, and nothing else', async () => {
-    let refused = 0;
-    const tmail = createTmailClient({ baseUrl, password: 'wrong', onRefused: () => refused++ });
+  it('reports each call with its operation, result and duration', async () => {
+    const calls: [string, string, number][] = [];
+    const report = (...call: [string, string, number]) => void calls.push(call);
 
-    for (const status of [401, 403, 500, 429]) {
-      reply = { status, body: 'no' };
-      await tmail.removeMember('acme.com', 'sales', 'jane@acme.com').catch(() => {});
-    }
+    reply = { status: 401, body: 'no' };
+    await createTmailClient({ baseUrl, password: 'wrong', onCall: report })
+      .addMember('acme.com', 'sales', 'jane@acme.com', 'member')
+      .catch(() => {});
+    reply = { status: 204 };
+    await createTmailClient({ baseUrl, onCall: report }).removeMember('acme.com', 'sales', 'jane');
+    await createTmailClient({ baseUrl: 'http://127.0.0.1:1', onCall: report })
+      .createTeamMailbox('acme.com', 'sales')
+      .catch(() => {});
 
-    expect(refused).toBe(2);
+    expect(calls).toEqual([
+      ['addMember', '401', expect.any(Number)],
+      ['removeMember', '204', expect.any(Number)],
+      ['createTeamMailbox', 'error', expect.any(Number)],
+    ]);
   });
 
   it('waits for a domain TMail does not have yet', async () => {
