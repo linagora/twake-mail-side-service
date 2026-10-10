@@ -39,6 +39,12 @@ describe('loadConfig', () => {
     );
   });
 
+  it('throws when the retry delay cap is below the first delay', () => {
+    expect(() =>
+      loadConfig({ ...baseEnv, RABBITMQ_RETRY_DELAY: '5000', RABBITMQ_MAX_RETRY_DELAY: '3000' }),
+    ).toThrow(/RABBITMQ_MAX_RETRY_DELAY/);
+  });
+
   it('coerces numeric env vars', () => {
     const cfg = loadConfig({ ...baseEnv, RABBITMQ_PREFETCH: '10', HEALTH_PORT: '9090' });
     expect(cfg.RABBITMQ_PREFETCH).toBe(10);

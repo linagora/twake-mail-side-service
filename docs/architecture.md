@@ -72,7 +72,7 @@ sequenceDiagram
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), waiting `RABBITMQ_RETRY_DELAY` after the first and twice as long after each next one, up to `RABBITMQ_MAX_RETRY_DELAY`. Then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
 - What repairs a dead letter depends on the event:
   - Space, member and user deletion events: the next sync of the space.
   - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).

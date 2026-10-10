@@ -10,7 +10,7 @@ Environment variables, validated at startup. The service exits on an invalid val
 - `RABBITMQ_DNS_EXCHANGE` (default `admin-panel`) and `RABBITMQ_DNS_ROUTING_KEY` (default `dns.validated`): the DNS validation event. The service provisions an organization's spaces when its `mailDnsConfigurationValidated` is true. Set these to where the admin panel publishes it.
 - `RABBITMQ_USER_DELETED_EXCHANGE` (default `b2b`) and `RABBITMQ_USER_DELETED_ROUTING_KEY` (default `domain.user.deleted`): user deletion.
 - `RABBITMQ_MAIL_EXCHANGE` (default `tmail`), `RABBITMQ_MAIL_RECEIVED_ROUTING_KEY` (default `team-mailbox.message.received`) and `RABBITMQ_MAIL_SENT_ROUTING_KEY` (default `team-mailbox.message.sent`): the TMail plugin's team mail events. Match the plugin's `exchange`, `receivedRoutingKey` and `sentRoutingKey` settings.
-- `RABBITMQ_PREFETCH` (default 1), `RABBITMQ_MAX_RETRIES` (default 5, handler attempts before the dead letter queue), `RABBITMQ_RETRY_DELAY` in ms (default 1000).
+- `RABBITMQ_PREFETCH` (default 1), `RABBITMQ_MAX_RETRIES` (default 8, handler attempts before the dead letter queue), `RABBITMQ_RETRY_DELAY` in ms (default 1000, the first wait), `RABBITMQ_MAX_RETRY_DELAY` in ms (default 30000, the cap of a wait that doubles after each attempt). The defaults ride out about a minute and a half of outage.
 
 The queue's delivery limit (20 broker redeliveries, for example after a crash mid-message) and single active consumer are fixed in code. RabbitMQ refuses to redeclare a queue with different arguments, so change them with a policy.
 

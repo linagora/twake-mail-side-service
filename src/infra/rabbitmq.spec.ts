@@ -5,6 +5,7 @@ import { silentLogger } from '../testing/helpers.js';
 import { createConsumer } from './rabbitmq.js';
 
 const options = vi.hoisted(() => ({ last: undefined as RabbitMQClientOptions | undefined }));
+const subscribe = vi.hoisted(() => vi.fn());
 
 vi.mock('@linagora/rabbitmq-client', () => ({
   RabbitMQClient: class {
@@ -14,6 +15,8 @@ vi.mock('@linagora/rabbitmq-client', () => ({
     isConnected() {
       return true;
     }
+    async init() {}
+    subscribe = subscribe;
   },
 }));
 
@@ -24,6 +27,19 @@ const config = loadConfig({
 });
 
 describe('createConsumer', () => {
+  it('retries a failing handler with a delay that doubles up to a cap', async () => {
+    const consumer = createConsumer({
+      config: { ...config, RABBITMQ_MAX_RETRIES: 7, RABBITMQ_MAX_RETRY_DELAY: 30_000 },
+      logger: silentLogger,
+      handler: vi.fn(),
+    });
+
+    await consumer.start();
+
+    expect(options.last).toMatchObject({ retryDelay: 1000 });
+    expect(subscribe.mock.lastCall?.[4]).toMatchObject({ maxRetries: 7, maxRetryDelay: 30_000 });
+  });
+
   it('reports a subscription lost when a reconnect fails to restore it', () => {
     const onSubscriptionLost = vi.fn();
     const consumer = createConsumer({

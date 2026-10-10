@@ -15,8 +15,9 @@ const envSchema = z.object({
   RABBITMQ_MAIL_SENT_ROUTING_KEY: z.string().default('team-mailbox.message.sent'),
   RABBITMQ_ACTIVITY_EXCHANGE: z.string().default('activity'),
   RABBITMQ_PREFETCH: positiveInt.default(1),
-  RABBITMQ_MAX_RETRIES: positiveInt.default(5),
+  RABBITMQ_MAX_RETRIES: positiveInt.default(8),
   RABBITMQ_RETRY_DELAY: positiveInt.default(1000),
+  RABBITMQ_MAX_RETRY_DELAY: positiveInt.default(30_000),
   OUTBOX_INTERVAL_MS: positiveInt.default(1000),
   PARKING_INTERVAL_MS: positiveInt.default(5000),
   PARKING_MAX_WAIT_MS: positiveInt.default(10 * 60 * 1000),
@@ -37,6 +38,11 @@ export const loadConfig = (env: Record<string, string | undefined> = process.env
   const result = envSchema.safeParse(env);
   if (!result.success) {
     throw new Error(`Invalid configuration:\n${z.prettifyError(result.error)}`);
+  }
+  if (result.data.RABBITMQ_MAX_RETRY_DELAY < result.data.RABBITMQ_RETRY_DELAY) {
+    throw new Error(
+      'Invalid configuration: RABBITMQ_MAX_RETRY_DELAY is below RABBITMQ_RETRY_DELAY',
+    );
   }
   return result.data;
 };
