@@ -3,8 +3,8 @@ import {
   type RabbitMQClient,
   type RabbitMQMessageHandler,
 } from '@linagora/rabbitmq-client';
-import { asc, count, eq, sql } from 'drizzle-orm';
-import type { Db } from '../infra/db.js';
+import { asc, count, eq } from 'drizzle-orm';
+import type { Db, TryLock } from '../infra/db.js';
 import type { Logger } from '../infra/logger.js';
 import { MalformedEventError, NotYetKnownError } from './errors.js';
 import type { Handler } from './router.js';
@@ -24,27 +24,30 @@ export interface Parking {
 
 interface ParkingDeps {
   db: Db;
+  tryLock: TryLock;
   client: Pick<RabbitMQClient, 'publish' | 'isConnected'>;
   handlers: Record<string, Handler>;
-  deadLetterQueue: string;
+  deadLetters: { exchange: string; routingKey: string };
   maxWaitMs: number;
   logger: Logger;
 }
 
 export const createParking = ({
   db,
+  tryLock,
   client,
   handlers,
-  deadLetterQueue,
+  deadLetters,
   maxWaitMs,
   logger,
 }: ParkingDeps): Parking => {
   let timer: NodeJS.Timeout | undefined;
   let running: Promise<void> = Promise.resolve();
 
-  // The message was acked when parked, so it goes to the queue directly, its headers standing in for x-death.
+  // The message was acked when parked, so it is published where RabbitMQ sends dead letters,
+  // its headers standing in for x-death.
   const deadLetter = (row: typeof parkedEvents.$inferSelect) =>
-    client.publish('', deadLetterQueue, row.body, {
+    client.publish(deadLetters.exchange, deadLetters.routingKey, row.body, {
       messageId: row.properties.messageId,
       maxAttempts: 1,
       mandatory: true,
@@ -88,20 +91,17 @@ export const createParking = ({
     }
   };
 
-  // The transaction-scoped lock keeps a single replica replaying, so no event runs twice at once.
-  const retry = (now = new Date()) =>
-    db.transaction(async (tx) => {
-      const [lock] = await tx.execute<{ locked: boolean }>(
-        sql`select pg_try_advisory_xact_lock(hashtext('parking')) as locked`,
-      );
-      if (!lock?.locked) return;
-      const parked = await tx.select().from(parkedEvents).orderBy(asc(parkedEvents.id));
+  // A single replica replays, so no event runs twice at once.
+  const retry = async (now = new Date()) => {
+    await tryLock('parking', async () => {
+      const parked = await db.select().from(parkedEvents).orderBy(asc(parkedEvents.id));
       for (const row of parked) {
         await replay(row, now).catch((err) =>
           logger.error({ err, messageId: row.properties.messageId }, 'parked event retry failed'),
         );
       }
     });
+  };
 
   const tick = (intervalMs: number) => {
     running = (client.isConnected() ? retry() : Promise.resolve())

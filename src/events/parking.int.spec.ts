@@ -39,9 +39,10 @@ const setup = (handler: Mock<RabbitMQMessageHandler>) => {
   const publish = vi.fn().mockResolvedValue(undefined);
   const parking = createParking({
     db: client.db,
+    tryLock: client.tryLock,
     client: broker(publish),
     handlers: { 'team-mailbox.message.received': handler },
-    deadLetterQueue: 'twake-mail-side-service.dlq',
+    deadLetters: { exchange: 'twake-mail-side-service.dlx', routingKey: 'twake.space.#.dead' },
     maxWaitMs: 10 * MINUTE,
     logger: silentLogger,
   });
@@ -62,6 +63,34 @@ describe('parking', () => {
       [body, props],
       [body, props],
     ]);
+  });
+
+  it('replays with no transaction open', async () => {
+    let open: unknown;
+    const { parking } = setup(
+      vi.fn(async () => {
+        [open] = await client.db.execute(
+          sql`select count(*)::int as n from pg_stat_activity
+              where datname = current_database() and state like 'idle in transaction%'`,
+        );
+      }),
+    );
+    await parking.park(body, props, notYet());
+
+    await parking.retry();
+
+    expect(open).toEqual({ n: 0 });
+  });
+
+  it('replays on one replica at a time', async () => {
+    const handler = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 100)));
+    const one = setup(handler).parking;
+    const other = setup(handler).parking;
+    await one.park(body, props, notYet());
+
+    await Promise.all([one.retry(), other.retry()]);
+
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it('counts the events waiting', async () => {
@@ -130,8 +159,8 @@ describe('parking', () => {
 
     expect(publish.mock.calls).toEqual([
       [
-        '',
-        'twake-mail-side-service.dlq',
+        'twake-mail-side-service.dlx',
+        'twake.space.#.dead',
         body,
         {
           messageId: 'm1:received',
