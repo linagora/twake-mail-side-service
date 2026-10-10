@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'src/**/*.int.spec.ts'",
-    "test:integration": "vitest run int.spec",
+    "test:integration": "vitest run .int.spec",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "db:generate": "drizzle-kit generate"
   },
