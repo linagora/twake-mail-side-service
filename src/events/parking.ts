@@ -6,12 +6,8 @@ import {
 import { asc, count, eq, sql } from 'drizzle-orm';
 import type { Db } from '../infra/db.js';
 import type { Logger } from '../infra/logger.js';
+import { MalformedEventError, NotYetKnownError } from './errors.js';
 import { parkedEvents } from './schema.js';
-
-// Thrown by a handler when the event needs an object a later event may still bring.
-export class NotYetKnownError extends Error {
-  override name = 'NotYetKnownError';
-}
 
 export const parkedCount = async (db: Db): Promise<number> => {
   const [row] = await db.select({ n: count() }).from(parkedEvents);
@@ -68,6 +64,14 @@ export const createParking = ({
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       const waited = now.getTime() - row.parkedAt.getTime();
+      if (err instanceof MalformedEventError) {
+        await db.delete(parkedEvents).where(eq(parkedEvents.id, row.id));
+        logger.warn(
+          { messageId: row.properties.messageId, reason },
+          'malformed parked event dropped',
+        );
+        return;
+      }
       if (!(err instanceof DeadLetterError) && waited < maxWaitMs) {
         if (!(err instanceof NotYetKnownError)) {
           logger.warn({ err, messageId: row.properties.messageId }, 'parked event replay failed');

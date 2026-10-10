@@ -1,10 +1,9 @@
-import { DeadLetterError } from '@linagora/rabbitmq-client';
 import { z } from 'zod';
+import { MalformedEventError } from '../../events/errors.js';
 
-// A malformed event stays malformed: retrying it only delays the dead letter queue.
 export const parseEvent = <T extends z.ZodType>(schema: T, body: unknown): z.infer<T> => {
   const result = schema.safeParse(body);
-  if (!result.success) throw new DeadLetterError(z.prettifyError(result.error));
+  if (!result.success) throw new MalformedEventError(z.prettifyError(result.error));
   return result.data;
 };
 

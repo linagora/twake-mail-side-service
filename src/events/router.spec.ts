@@ -1,12 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMetrics } from '../infra/metrics.js';
 import { silentLogger } from '../testing/helpers.js';
-import { NotYetKnownError } from './parking.js';
+import { MalformedEventError, NotYetKnownError } from './errors.js';
 import { createRouter } from './router.js';
 
 const props = (routingKey: string) => ({ exchange: 'space', routingKey, headers: {} });
 
 describe('createRouter', () => {
+  it('drops a malformed event', async () => {
+    const metrics = createMetrics();
+    const route = createRouter({
+      handlers: {
+        'dns.validated': vi.fn().mockRejectedValue(new MalformedEventError('no domain')),
+      },
+      park: vi.fn(),
+      logger: silentLogger,
+      metrics,
+    });
+
+    await expect(route({}, props('dns.validated'))).resolves.toBeUndefined();
+
+    const dropped = await metrics.messagesProcessed.get();
+    expect(dropped.values).toContainEqual(
+      expect.objectContaining({ labels: { event: 'dns.validated', outcome: 'dropped' } }),
+    );
+  });
+
   it('hands a message to the handler of its routing key', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     const route = createRouter({

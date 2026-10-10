@@ -2,7 +2,7 @@
 
 Every event the service reads or publishes, with the fields it uses. Exchange and routing key names are the defaults; [operations](operations.md) lists the settings that change them.
 
-Payloads are validated on arrival. Fields not listed here are accepted and ignored. A payload that fails validation goes straight to the dead letter queue, without retries.
+Payloads are validated on arrival. Fields not listed here are accepted and ignored. A payload that fails validation is logged and dropped, without retries.
 
 ## Consumed
 

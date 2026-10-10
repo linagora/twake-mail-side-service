@@ -1,10 +1,10 @@
-import { DeadLetterError, type RabbitMQClient } from '@linagora/rabbitmq-client';
+import type { RabbitMQClient } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createActivity } from '../../events/activity.js';
 import { createOutboxRelay } from '../../events/outbox.js';
-import { NotYetKnownError } from '../../events/parking.js';
+import { MalformedEventError, NotYetKnownError } from '../../events/errors.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
 import { broker, silentLogger } from '../../testing/helpers.js';
 import { spaces } from '../spaces/schema.js';
@@ -134,12 +134,12 @@ describe('mail service', () => {
     ]);
   });
 
-  it('dead-letters a malformed event', async () => {
+  it('refuses a malformed event', async () => {
     await expect(service().messageAdded({ teamMailbox: 'x@acme.com' })).rejects.toBeInstanceOf(
-      DeadLetterError,
+      MalformedEventError,
     );
     await expect(
       service().messageAdded({ ...received(), timestamp: '1759771383281' }),
-    ).rejects.toBeInstanceOf(DeadLetterError);
+    ).rejects.toBeInstanceOf(MalformedEventError);
   });
 });

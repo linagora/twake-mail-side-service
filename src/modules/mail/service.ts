@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Activity } from '../../events/activity.js';
 import { enqueue } from '../../events/outbox.js';
-import { NotYetKnownError } from '../../events/parking.js';
+import { NotYetKnownError } from '../../events/errors.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
 import { parseEvent } from '../spaces/events.js';

@@ -1,10 +1,11 @@
-import { DeadLetterError, type RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
+import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createDbClient, type DbClient } from '../infra/db.js';
 import { broker, silentLogger } from '../testing/helpers.js';
-import { createParking, NotYetKnownError, parkedCount } from './parking.js';
+import { MalformedEventError, NotYetKnownError, RejectedEventError } from './errors.js';
+import { createParking, parkedCount } from './parking.js';
 
 const MINUTE = 60_000;
 const body = { teamMailbox: 'sales@acme.com', messageId: 'm1' };
@@ -87,12 +88,22 @@ describe('parking', () => {
   });
 
   it('dead letters at once an event its replay rejects', async () => {
-    const { parking, publish } = setup(vi.fn().mockRejectedValue(new DeadLetterError('bad')));
+    const { parking, publish } = setup(vi.fn().mockRejectedValue(new RejectedEventError('bad')));
     await parking.park(body, props, notYet());
 
     await parking.retry();
 
     expect(publish).toHaveBeenCalledOnce();
+    expect(await parkedCount(client.db)).toBe(0);
+  });
+
+  it('drops a parked event its replay finds malformed', async () => {
+    const { parking, publish } = setup(vi.fn().mockRejectedValue(new MalformedEventError('bad')));
+    await parking.park(body, props, notYet());
+
+    await parking.retry();
+
+    expect(publish).not.toHaveBeenCalled();
     expect(await parkedCount(client.db)).toBe(0);
   });
 

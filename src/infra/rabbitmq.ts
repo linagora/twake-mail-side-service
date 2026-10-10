@@ -25,7 +25,6 @@ export const createConsumer = ({
   let subscribed = false;
   const client = new RabbitMQClient({
     url: config.RABBITMQ_URL,
-    maxRetries: config.RABBITMQ_MAX_RETRIES,
     retryDelay: config.RABBITMQ_RETRY_DELAY,
     prefetch: config.RABBITMQ_PREFETCH,
     // Half the budget, so closing the connection and the database still fits before the forced exit.
@@ -70,6 +69,8 @@ export const createConsumer = ({
           ],
           deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
           passiveExchanges: true,
+          maxRetries: config.RABBITMQ_MAX_RETRIES,
+          maxRetryDelay: config.RABBITMQ_MAX_RETRY_DELAY,
           // Single active consumer keeps one replica reading, so events stay in publish order.
           // Both are fixed: RabbitMQ refuses to redeclare a queue with different arguments.
           queueArguments: {

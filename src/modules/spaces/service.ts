@@ -1,6 +1,7 @@
 import { DeadLetterError } from '@linagora/rabbitmq-client';
 import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { Activity } from '../../events/activity.js';
+import { RejectedEventError } from '../../events/errors.js';
 import { enqueue } from '../../events/outbox.js';
 import type { Db } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
@@ -97,7 +98,7 @@ export const createSpaceService = ({
       if (inTmail.has(candidate)) {
         if (heldBySpace.has(address)) continue;
         // It may be this space's mailbox from a lost row: only a person can tell.
-        throw new DeadLetterError(
+        throw new RejectedEventError(
           `${address} is a team mailbox no space holds, store it as space ${spaceId}'s address to use it`,
         );
       }

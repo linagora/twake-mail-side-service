@@ -1,4 +1,4 @@
-import { DeadLetterError, type RabbitMQClient } from '@linagora/rabbitmq-client';
+import type { RabbitMQClient } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -13,6 +13,7 @@ import {
   type Mocked,
 } from 'vitest';
 import { createActivity } from '../../events/activity.js';
+import { RejectedEventError } from '../../events/errors.js';
 import { createOutboxRelay } from '../../events/outbox.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/port.js';
@@ -252,7 +253,7 @@ describe('space service', () => {
     await service().dnsValidated(validated());
     tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
 
-    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(RejectedEventError);
 
     expect(tmail.createTeamMailbox).not.toHaveBeenCalled();
     expect(await provisioned()).toEqual([]);
@@ -267,7 +268,7 @@ describe('space service', () => {
 
     tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
     tmail.createTeamMailbox.mockRejectedValue(new AddressTakenError(409, 'held by a user'));
-    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(RejectedEventError);
 
     expect(tmail.createTeamMailbox).not.toHaveBeenCalledWith('acme.com', 'sales-eu-2');
   });
@@ -275,7 +276,7 @@ describe('space service', () => {
   it('provisions a space linked by hand to an existing team mailbox', async () => {
     await service().dnsValidated(validated());
     tmail.listTeamMailboxes.mockResolvedValue(['sales-eu']);
-    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(DeadLetterError);
+    await expect(service().spaceCreated(created())).rejects.toBeInstanceOf(RejectedEventError);
 
     await tmail.addMember('acme.com', 'sales-eu', 'gone@acme.com', 'manager');
     await client.db

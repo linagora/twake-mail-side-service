@@ -44,7 +44,7 @@ flowchart TB
 - The router picks the handler from the routing key alone, and records a metric for each attempt.
 - The space service handles space, member, DNS and user events, provisions and closes team mailboxes, and runs the purge. See [team mailboxes](team-mailboxes.md).
 - The mail service turns team mail events into activity events.
-- The TMail client makes one HTTP call per operation, with a 10 second timeout. Retries come from the queue.
+- The TMail client makes one HTTP call per operation, with a 10 second timeout. Retries come from the queue, and only for a timeout, a 429 or a 5xx.
 - State lives in PostgreSQL. See [data model](data-model.md).
 
 ## Startup and shutdown
@@ -72,12 +72,13 @@ sequenceDiagram
 ## Ordering and retries
 
 - The queue has single active consumer on, so with several replicas one reads at a time and events are handled in publish order.
-- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
+- A failing handler runs at most `RABBITMQ_MAX_RETRIES` times in process (attempts, not retries), waiting `RABBITMQ_RETRY_DELAY` after the first and twice as long after each next one, up to `RABBITMQ_MAX_RETRY_DELAY`. Then the message goes to the dead letter queue `twake-mail-side-service.dlq`. Nobody replays it, since it could apply an old event over newer ones.
 - What repairs a dead letter depends on the event:
   - Space, member and user deletion events: the next sync of the space.
   - A DNS event: the next sync, when the organization's domain was stored before the failure. Otherwise its spaces wait until the admin panel validates it again, see [operations](operations.md#organizations-validated-before-the-first-deployment).
   - A team mail event: nothing. That message never shows in the space feed.
-- A malformed event goes straight to the dead letter queue.
+- A malformed event is logged and dropped, since no retry or replay can fix it.
+- An event refused for good, such as a space whose address is a team mailbox no space holds, goes straight to the dead letter queue.
 - An event that needs an object a later event may still bring (mail of a space still being provisioned) is parked: acked and stored in `parked_events`. Every `PARKING_INTERVAL_MS` one replica replays the parked events through their handler. One still not applicable after `PARKING_MAX_WAIT_MS` is published to the dead letter queue, with its original exchange, routing key and last error in the `x-original-exchange`, `x-original-routing-key` and `x-parked-reason` headers.
 - An event about several spaces (a DNS event, the end of a sync) handles each one, then fails if any failed, so the retry only redoes what is left.
 - The source exchanges belong to their publishers, so the service only checks that they exist and fails to start when one is missing.
