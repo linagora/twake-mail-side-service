@@ -7,6 +7,7 @@ import { asc, count, eq, sql } from 'drizzle-orm';
 import type { Db } from '../infra/db.js';
 import type { Logger } from '../infra/logger.js';
 import { MalformedEventError, NotYetKnownError } from './errors.js';
+import type { Handler } from './router.js';
 import { parkedEvents } from './schema.js';
 
 export const parkedCount = async (db: Db): Promise<number> => {
@@ -24,7 +25,7 @@ export interface Parking {
 interface ParkingDeps {
   db: Db;
   client: Pick<RabbitMQClient, 'publish' | 'isConnected'>;
-  handlers: Record<string, RabbitMQMessageHandler>;
+  handlers: Record<string, Handler>;
   deadLetterQueue: string;
   maxWaitMs: number;
   logger: Logger;

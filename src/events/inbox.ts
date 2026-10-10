@@ -1,6 +1,7 @@
-import type { RabbitMQMessageHandler, RabbitMQMessageProperties } from '@linagora/rabbitmq-client';
+import type { RabbitMQMessageProperties } from '@linagora/rabbitmq-client';
 import { and, eq, lt } from 'drizzle-orm';
 import type { Db, Lock } from '../infra/db.js';
+import type { Handler } from './router.js';
 import { processedEvents } from './schema.js';
 
 // Longer than any redelivery or parking wait, so a duplicate still finds its row.
@@ -15,7 +16,7 @@ const byMessageId: InboxKey = (_, { messageId }) =>
   messageId ? { source: 'amqp', id: messageId } : undefined;
 
 export interface Inbox {
-  wrap(handler: RabbitMQMessageHandler, key?: InboxKey): RabbitMQMessageHandler;
+  wrap(handler: Handler, key?: InboxKey): Handler;
   purge(now?: Date): Promise<void>;
 }
 
@@ -28,14 +29,15 @@ export const createInbox = ({ db, lock }: { db: Db; lock: Lock }): Inbox => ({
     async (message, properties) => {
       const seen = key(message, properties);
       if (!seen) return handler(message, properties);
-      await lock(`${seen.source}:${seen.id}`, async () => {
+      return lock(`${seen.source}:${seen.id}`, async () => {
         const [done] = await db
           .select({ id: processedEvents.id })
           .from(processedEvents)
           .where(and(eq(processedEvents.source, seen.source), eq(processedEvents.id, seen.id)));
-        if (done) return;
-        await handler(message, properties);
+        if (done) return 'duplicate';
+        const skipped = await handler(message, properties);
         await db.insert(processedEvents).values(seen).onConflictDoNothing();
+        return skipped;
       });
     },
 

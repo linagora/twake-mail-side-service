@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMetrics } from '../infra/metrics.js';
 import { silentLogger } from '../testing/helpers.js';
-import { MalformedEventError, NotYetKnownError } from './errors.js';
+import { MalformedEventError, NotYetKnownError, RejectedEventError } from './errors.js';
 import { createRouter } from './router.js';
 
 const props = (routingKey: string) => ({ exchange: 'space', routingKey, headers: {} });
@@ -46,11 +46,50 @@ describe('createRouter', () => {
 
     await expect(route({}, props('twake.space.group.linked'))).resolves.toBeUndefined();
 
-    const ignored = await metrics.messagesProcessed.get();
-    expect(ignored.values).toContainEqual(
+    const unrouted = await metrics.messagesProcessed.get();
+    expect(unrouted.values).toContainEqual(
       expect.objectContaining({
-        labels: { event: 'twake.space.group.linked', outcome: 'ignored' },
+        labels: { event: 'twake.space.group.linked', outcome: 'unrouted' },
         value: 1,
+      }),
+    );
+  });
+
+  it.each(['duplicate', 'stale'] as const)(
+    'records a message its handler skipped as %s',
+    async (outcome) => {
+      const metrics = createMetrics();
+      const route = createRouter({
+        handlers: { 'twake.space.updated': vi.fn().mockResolvedValue(outcome) },
+        park: vi.fn(),
+        logger: silentLogger,
+        metrics,
+      });
+
+      await route({}, props('twake.space.updated'));
+
+      const recorded = await metrics.messagesProcessed.get();
+      expect(recorded.values).toContainEqual(
+        expect.objectContaining({ labels: { event: 'twake.space.updated', outcome } }),
+      );
+    },
+  );
+
+  it('records a message refused for good as dead lettered', async () => {
+    const metrics = createMetrics();
+    const route = createRouter({
+      handlers: { 'twake.space.created': vi.fn().mockRejectedValue(new RejectedEventError('no')) },
+      park: vi.fn(),
+      logger: silentLogger,
+      metrics,
+    });
+
+    await expect(route({}, props('twake.space.created'))).rejects.toThrow('no');
+
+    const recorded = await metrics.messagesProcessed.get();
+    expect(recorded.values).toContainEqual(
+      expect.objectContaining({
+        labels: { event: 'twake.space.created', outcome: 'dead_lettered' },
       }),
     );
   });

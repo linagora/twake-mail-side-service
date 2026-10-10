@@ -1,12 +1,17 @@
-import type { RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
+import { DeadLetterError, type RabbitMQMessageHandler } from '@linagora/rabbitmq-client';
 import * as Sentry from '@sentry/node';
 import type { Logger } from '../infra/logger.js';
 import type { Metrics, Outcome } from '../infra/metrics.js';
 import { MalformedEventError, NotYetKnownError } from './errors.js';
 import type { Parking } from './parking.js';
 
+// A handler that skips its message says why, for the metrics.
+export type Handler = (
+  ...args: Parameters<RabbitMQMessageHandler>
+) => Promise<'duplicate' | 'stale' | void>;
+
 export interface RouterDeps {
-  handlers: Record<string, RabbitMQMessageHandler>;
+  handlers: Record<string, Handler>;
   park: Parking['park'];
   logger: Logger;
   metrics: Metrics;
@@ -27,15 +32,14 @@ export const createRouter = ({ handlers, park, logger, metrics }: RouterDeps): R
     const handler = handlers[event];
     if (!handler) {
       logger.debug({ event, exchange: properties.exchange }, 'no handler for routing key');
-      metrics.observe(event, 'ignored', Date.now() - started);
+      metrics.observe(event, 'unrouted', Date.now() - started);
       return;
     }
     let outcome: Outcome = 'failed';
     const handling = { started };
     inHand.add(handling);
     try {
-      await handler(message, properties);
-      outcome = 'handled';
+      outcome = (await handler(message, properties)) ?? 'handled';
     } catch (err) {
       if (err instanceof MalformedEventError) {
         logger.warn({ event, messageId: properties.messageId, err }, 'malformed event dropped');
@@ -43,6 +47,7 @@ export const createRouter = ({ handlers, park, logger, metrics }: RouterDeps): R
         return;
       }
       if (!(err instanceof NotYetKnownError)) {
+        if (err instanceof DeadLetterError) outcome = 'dead_lettered';
         Sentry.captureException(err, { tags: { event } });
         throw err;
       }

@@ -38,8 +38,8 @@ describe('inbox', () => {
     const handle = vi.fn().mockResolvedValue(undefined);
     const handler = inbox().wrap(handle);
 
-    await handler(body, props('m1'));
-    await handler(body, props('m1'));
+    await expect(handler(body, props('m1'))).resolves.toBeUndefined();
+    await expect(handler(body, props('m1'))).resolves.toBe('duplicate');
     await handler(body, props('m2'));
 
     expect(handle).toHaveBeenCalledTimes(2);
