@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { ActivityPublisher } from '../activity.js';
+import type { Activity } from '../activity.js';
 import type { Db } from '../db.js';
 import type { Logger } from '../logger.js';
+import { enqueue } from '../outbox.js';
 import { spaces } from '../schema.js';
 import { parseEvent } from '../spaces/events.js';
 
@@ -12,7 +13,7 @@ export interface MailService {
 
 interface MailServiceDeps {
   db: Db;
-  activity: ActivityPublisher;
+  activity: Activity;
   logger: Logger;
 }
 
@@ -46,13 +47,16 @@ export const createMailService = ({ db, activity, logger }: MailServiceDeps): Ma
     if (!space.mailboxId) {
       throw new Error(`${event.teamMailbox} is still being provisioned`);
     }
-    await activity.message({
-      organizationId: space.organizationId,
-      mailboxId: space.mailboxId,
-      direction: event.direction,
-      messageId: event.messageId,
-      subject: event.subject,
-      time: event.timestamp,
-    });
+    await enqueue(
+      db,
+      activity.message({
+        organizationId: space.organizationId,
+        mailboxId: space.mailboxId,
+        direction: event.direction,
+        messageId: event.messageId,
+        subject: event.subject,
+        time: event.timestamp,
+      }),
+    );
   },
 });

@@ -1,12 +1,13 @@
-import { DeadLetterError } from '@linagora/rabbitmq-client';
+import { DeadLetterError, type RabbitMQClient } from '@linagora/rabbitmq-client';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
-import type { ActivityPublisher } from '../../src/activity.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { createActivity } from '../../src/activity.js';
 import { createDbClient, type DbClient } from '../../src/db.js';
 import { createMailService } from '../../src/mail/service.js';
+import { createOutboxRelay } from '../../src/outbox.js';
 import { spaces } from '../../src/schema.js';
-import { silentLogger } from '../helpers.js';
+import { broker, silentLogger } from '../helpers.js';
 
 const received = (teamMailbox = 'product-launch@acme.com') => ({
   teamMailbox,
@@ -22,9 +23,15 @@ const received = (teamMailbox = 'product-launch@acme.com') => ({
 
 let container: StartedPostgreSqlContainer;
 let client: DbClient;
-let activity: Mocked<ActivityPublisher>;
+let publish: Mock<RabbitMQClient['publish']>;
 
-const service = () => createMailService({ db: client.db, activity, logger: silentLogger });
+const service = () =>
+  createMailService({ db: client.db, activity: createActivity('activity'), logger: silentLogger });
+
+const published = async () => {
+  await createOutboxRelay({ db: client.db, client: broker(publish), logger: silentLogger }).relay();
+  return publish.mock.calls.map(([, routingKey, event]) => ({ routingKey, event }));
+};
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine').start();
@@ -38,7 +45,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await client.db.execute(sql`TRUNCATE organizations, spaces, space_members CASCADE`);
+  await client.db.execute(sql`TRUNCATE organizations, spaces, space_members, outbox CASCADE`);
   await client.db.insert(spaces).values([
     {
       spaceId: '6f1c1f3e-1b7a-4f0e-9a51-0c9f2b7d1a10',
@@ -55,10 +62,7 @@ beforeEach(async () => {
       address: 'waiting@acme.com',
     },
   ]);
-  activity = {
-    provisioned: vi.fn().mockResolvedValue(undefined),
-    message: vi.fn().mockResolvedValue(undefined),
-  };
+  publish = vi.fn().mockResolvedValue(undefined);
 });
 
 describe('mail service', () => {
@@ -70,25 +74,36 @@ describe('mail service', () => {
       subject: 'hello',
     });
 
-    expect(activity.message.mock.calls).toEqual([
-      [
-        {
-          organizationId: 'acme',
-          mailboxId: 'root-id',
-          direction: 'received',
-          messageId: '956ee570-c1aa-11f1-bdf6-19e2a75a28cc',
-          subject: 'Quarterly numbers',
+    expect(await published()).toEqual([
+      {
+        routingKey: 'com.twake.mail.message.received.v1',
+        event: expect.objectContaining({
+          id: 'root-id:956ee570-c1aa-11f1-bdf6-19e2a75a28cc:received',
+          twakeorg: 'acme',
           time: '2026-10-06T17:23:03.281571409Z',
-        },
-      ],
-      [expect.objectContaining({ mailboxId: 'root-id', direction: 'sent', subject: 'hello' })],
+          data: {
+            object: {
+              type: 'message',
+              id: '956ee570-c1aa-11f1-bdf6-19e2a75a28cc',
+              title: 'Quarterly numbers',
+              container: { kind: 'mailbox', id: 'root-id' },
+            },
+          },
+        }),
+      },
+      {
+        routingKey: 'com.twake.mail.message.sent.v1',
+        event: expect.objectContaining({
+          data: { object: expect.objectContaining({ title: 'hello' }) },
+        }),
+      },
     ]);
   });
 
   it('ignores the mail of a team mailbox no space owns', async () => {
     await service().messageAdded(received('other@acme.com'));
 
-    expect(activity.message).not.toHaveBeenCalled();
+    expect(await published()).toEqual([]);
   });
 
   it('ignores the mail of a deleted space', async () => {
@@ -96,20 +111,26 @@ describe('mail service', () => {
 
     await service().messageAdded(received());
 
-    expect(activity.message).not.toHaveBeenCalled();
+    expect(await published()).toEqual([]);
   });
 
   it('retries the mail of a space still being provisioned', async () => {
     await expect(service().messageAdded(received('waiting@acme.com'))).rejects.toThrow(
       'waiting@acme.com',
     );
-    expect(activity.message).not.toHaveBeenCalled();
+    expect(await published()).toEqual([]);
   });
 
   it('reports a mail without subject', async () => {
     await service().messageAdded({ ...received(), subject: null });
 
-    expect(activity.message).toHaveBeenCalledWith(expect.objectContaining({ subject: '' }));
+    expect(await published()).toEqual([
+      expect.objectContaining({
+        event: expect.objectContaining({
+          data: { object: expect.objectContaining({ title: '(no subject)' }) },
+        }),
+      }),
+    ]);
   });
 
   it('dead-letters a malformed event', async () => {

@@ -1,14 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import type { RabbitMQClient } from '@linagora/rabbitmq-client';
+import type { OutboxMessage } from './outbox.js';
 
 export type MailDirection = 'received' | 'sent';
 
-export interface ActivityPublisher {
+export interface Activity {
   provisioned(mailbox: {
     organizationId: string;
     spaceId: string;
     mailboxId: string;
-  }): Promise<void>;
+  }): OutboxMessage;
   message(mail: {
     organizationId: string;
     mailboxId: string;
@@ -16,39 +15,39 @@ export interface ActivityPublisher {
     messageId: string;
     subject: string;
     time: string;
-  }): Promise<void>;
-}
-
-interface ActivityDeps {
-  client: Pick<RabbitMQClient, 'publish'>;
-  exchange: string;
+  }): OutboxMessage;
 }
 
 const SOURCE = 'twake://mail';
 
-export const createActivityPublisher = ({ client, exchange }: ActivityDeps): ActivityPublisher => {
-  const publish = async (
+export const createActivity = (exchange: string): Activity => {
+  const event = (
     type: string,
     twakeorg: string,
     data: Record<string, unknown>,
-    { id = randomUUID(), time = new Date().toISOString() }: { id?: string; time?: string } = {},
-  ) => {
-    const event = { specversion: '1.0', id, source: SOURCE, type, time, twakeorg, data };
-    await client.publish(exchange, type, event, { messageId: event.id });
-  };
+    { id, time = new Date().toISOString() }: { id: string; time?: string },
+  ): OutboxMessage => ({
+    exchange,
+    routingKey: type,
+    messageId: id,
+    body: { specversion: '1.0', id, source: SOURCE, type, time, twakeorg, data },
+  });
 
   return {
     // The Mail embed opens a team mailbox by its root JMAP mailbox id, so that is the resource id.
+    // A space gets one mailbox, so the pair names the event and a republish keeps it.
     provisioned: ({ organizationId, spaceId, mailboxId }) =>
-      publish('com.twake.mail.space.provisioned.v1', organizationId, {
-        space_id: spaceId,
-        resource: { kind: 'mailbox', id: mailboxId },
-      }),
+      event(
+        'com.twake.mail.space.provisioned.v1',
+        organizationId,
+        { space_id: spaceId, resource: { kind: 'mailbox', id: mailboxId } },
+        { id: `${spaceId}:${mailboxId}:provisioned` },
+      ),
 
     // TwakeSpace deduplicates on the event id, so a redelivered mail keeps the same one.
     // The mailbox id is in it since a copy to another mailbox may keep the message id.
     message: ({ organizationId, mailboxId, direction, messageId, subject, time }) =>
-      publish(
+      event(
         `com.twake.mail.message.${direction}.v1`,
         organizationId,
         {

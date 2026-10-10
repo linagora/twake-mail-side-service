@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createActivityPublisher } from './activity.js';
+import { createActivity } from './activity.js';
 import { createTmailClient } from './clients/tmail.js';
 import { loadConfig } from './config.js';
 import { createConsumer } from './consumers/index.js';
@@ -9,6 +9,7 @@ import { createHealthServer } from './health.js';
 import { logger } from './logger.js';
 import { createMailService } from './mail/service.js';
 import { createMetrics } from './metrics.js';
+import { createOutboxRelay, enqueue, pendingCount } from './outbox.js';
 import { createSpaceService } from './spaces/service.js';
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
@@ -18,7 +19,7 @@ const main = async (): Promise<void> => {
   logger.level = config.LOG_LEVEL;
 
   const db = createDbClient(config.DATABASE_URL);
-  const metrics = createMetrics();
+  const metrics = createMetrics(() => pendingCount(db.db));
   // The router is built after the consumer, whose client publishes the activity events.
   const consumer = createConsumer({
     config,
@@ -29,10 +30,8 @@ const main = async (): Promise<void> => {
       void shutdown('subscriptionLost', 1);
     },
   });
-  const activity = createActivityPublisher({
-    client: consumer.publisher,
-    exchange: config.RABBITMQ_ACTIVITY_EXCHANGE,
-  });
+  const activity = createActivity(config.RABBITMQ_ACTIVITY_EXCHANGE);
+  const outbox = createOutboxRelay({ db: db.db, client: consumer.publisher, logger });
   const spaces = createSpaceService({
     db: db.db,
     tmail: createTmailClient({
@@ -68,14 +67,15 @@ const main = async (): Promise<void> => {
   try {
     await db.migrate();
     await consumer.start();
-    // A sync request fans out to every app and every space, so only a first deployment sends one.
-    if (!(await spaces.hasSpaces())) {
-      await consumer.publisher.publish(
-        config.RABBITMQ_SPACE_EXCHANGE,
-        'twake.space.sync.requested',
-        { timestamp: new Date().toISOString() },
-        { messageId: randomUUID() },
-      );
+    // A sync request fans out to every app and every space, so only a first deployment sends one,
+    // and a restart while it is still in the outbox does not add another.
+    if (!(await spaces.hasSpaces()) && !(await pendingCount(db.db, 'twake.space.sync.requested'))) {
+      await enqueue(db.db, {
+        exchange: config.RABBITMQ_SPACE_EXCHANGE,
+        routingKey: 'twake.space.sync.requested',
+        messageId: randomUUID(),
+        body: { timestamp: new Date().toISOString() },
+      });
       logger.info('no space stored yet, sync of every organization requested');
     }
   } catch (err) {
@@ -83,6 +83,8 @@ const main = async (): Promise<void> => {
     await health.stop();
     process.exit(1);
   }
+
+  outbox.start(config.OUTBOX_INTERVAL_MS);
 
   // Each run deletes only what is due, so replicas running it at the same time are harmless.
   const purge = () =>
@@ -105,6 +107,8 @@ const main = async (): Promise<void> => {
 
     clearInterval(purger);
     try {
+      // Rows a handler writes after this stay in the outbox for the next start.
+      await outbox.stop();
       await consumer.stop();
       await db.close();
       await health.stop();
