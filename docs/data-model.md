@@ -28,6 +28,8 @@ erDiagram
     uuid user_id PK
     text email
     text role
+    timestamptz removed_at
+    timestamptz last_event_at
   }
 ```
 
@@ -49,7 +51,7 @@ One row per space, kept after its deletion so a replayed event cannot bring the 
 - `mailbox_id`: the JMAP id of the team mailbox's root mailbox, published in the provisioned event.
 - `provisioned_at`: set once the mailbox exists and its members are added, in the transaction that writes the provisioned event to the outbox. A space with no `provisioned_at` is waiting.
 - `deleted_at`: set when the space is deleted. The address stays held until the purge deletes the mailbox 30 days later, then it is cleared.
-- `last_event_at`: the newest event timestamp applied to the space. Older events are ignored.
+- `last_event_at`: the newest timestamp of a creation, sync, rename or deletion applied to the space. Older ones are ignored. Member events have their own, on `space_members`.
 
 A space's state follows from these columns:
 
@@ -64,7 +66,12 @@ stateDiagram-v2
 
 ## space_members
 
-The members of each live space, with their space role (`viewer`, `editor` or `admin`). A member removal event deletes its rows, and a sync replaces all of a space's rows. Rows are also removed when the space is closed or purged, and when the user is deleted. The index on `user_id` serves user deletion.
+The members of each live space, with their space role (`viewer`, `editor` or `admin`).
+
+- `removed_at`: set by a removal event, or by a sync that no longer lists the member. The row stays, so an older event cannot add the member back.
+- `last_event_at`: the newest event timestamp applied to the member. An older event about that member is ignored, whatever happened to the other members.
+
+Rows are deleted when the space is closed and when the user is deleted. The index on `user_id` serves user deletion.
 
 ## outbox
 

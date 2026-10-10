@@ -1,8 +1,7 @@
 import { DeadLetterError } from '@linagora/rabbitmq-client';
-import { and, eq, inArray, isNotNull, isNull, lt, ne, notInArray, sql } from 'drizzle-orm';
-import type { z } from 'zod';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { Activity } from '../../events/activity.js';
-import { RejectedEventError } from '../../events/errors.js';
+import { NotYetKnownError, RejectedEventError } from '../../events/errors.js';
 import { enqueue } from '../../events/outbox.js';
 import type { Db, Lock } from '../../infra/db.js';
 import type { Logger } from '../../infra/logger.js';
@@ -159,10 +158,7 @@ export const createSpaceService = ({
 
     const { name, domain } = splitAddress(address);
     // The mailbox may predate the space's row, linked by hand, with members it no longer has.
-    await matchMembers(
-      address,
-      await db.select().from(spaceMembers).where(eq(spaceMembers.spaceId, spaceId)),
-    );
+    await matchMembers(address, await liveMembers(spaceId));
 
     const mailboxId = await tmail.rootMailboxId(domain, name);
     await db.transaction(async (tx) => {
@@ -244,42 +240,55 @@ export const createSpaceService = ({
     }
   };
 
-  const onMember = (removed: boolean) => async (body: unknown) => {
-    const event = parseEvent(memberChanged, body);
-    await locked(event.id, () => changeMembers(event, removed));
+  // Freshness is kept per member: an event about one member must not be dropped because a newer
+  // one about another member was handled first.
+  const storeMember = async (
+    db: Db,
+    spaceId: string,
+    member: Member & { uuid: string },
+    removed: boolean,
+    timestamp: string,
+  ) => {
+    const values = {
+      email: member.email,
+      role: member.role,
+      removedAt: removed ? sql`now()` : null,
+      lastEventAt: new Date(timestamp),
+    };
+    const changed = await db
+      .insert(spaceMembers)
+      .values({ spaceId, userId: member.uuid, ...values })
+      .onConflictDoUpdate({
+        target: [spaceMembers.spaceId, spaceMembers.userId],
+        set: values,
+        setWhere: notNewerThan(timestamp),
+      })
+      .returning({ userId: spaceMembers.userId });
+    return changed.length > 0;
   };
 
-  const changeMembers = async (event: z.infer<typeof memberChanged>, removed: boolean) => {
-    const space = await findSpace(event.id);
-    if (!space || space.deletedAt) {
-      logger.warn({ spaceId: event.id }, 'member event for an unknown or deleted space, ignored');
-      return;
-    }
-    if (isStale(space, event.timestamp)) return;
-    for (const member of event.members) {
-      if (removed) {
-        await db
-          .delete(spaceMembers)
-          .where(and(eq(spaceMembers.spaceId, event.id), eq(spaceMembers.userId, member.uuid)));
-      } else {
-        await db
-          .insert(spaceMembers)
-          .values({
-            spaceId: event.id,
-            userId: member.uuid,
-            email: member.email,
-            role: member.role,
-          })
-          .onConflictDoUpdate({
-            target: [spaceMembers.spaceId, spaceMembers.userId],
-            set: { email: member.email, role: member.role },
-          });
+  const notNewerThan = (timestamp: string) =>
+    or(isNull(spaceMembers.lastEventAt), lte(spaceMembers.lastEventAt, new Date(timestamp)));
+
+  const liveMembers = (spaceId: string) =>
+    db
+      .select()
+      .from(spaceMembers)
+      .where(and(eq(spaceMembers.spaceId, spaceId), isNull(spaceMembers.removedAt)));
+
+  const onMember = (removed: boolean) => async (body: unknown) => {
+    const event = parseEvent(memberChanged, body);
+    await locked(event.id, async () => {
+      const space = await findSpace(event.id);
+      if (!space) throw new NotYetKnownError(`space ${event.id} is not known yet`);
+      if (space.deletedAt) return;
+      for (const member of event.members) {
+        if (!(await storeMember(db, event.id, member, removed, event.timestamp))) continue;
+        if (space.provisionedAt) {
+          await syncMember(space.address, member.email, removed ? undefined : member.role);
+        }
       }
-      if (space.provisionedAt) {
-        await syncMember(space.address, member.email, removed ? undefined : member.role);
-      }
-    }
-    await applied(event.id, event.timestamp);
+    });
   };
 
   return {
@@ -307,6 +316,7 @@ export const createSpaceService = ({
                   userId: m.uuid,
                   email: m.email,
                   role: m.role,
+                  lastEventAt: new Date(event.timestamp),
                 })),
               )
               .onConflictDoNothing();
@@ -329,24 +339,28 @@ export const createSpaceService = ({
             .insert(spaces)
             .values({ spaceId: event.id, organizationId: event.organizationId, name: event.name })
             .onConflictDoUpdate({ target: spaces.spaceId, set: { name: event.name } });
-          await tx.delete(spaceMembers).where(eq(spaceMembers.spaceId, event.id));
-          if (event.members.length) {
-            await tx
-              .insert(spaceMembers)
-              .values(
-                event.members.map((m) => ({
-                  spaceId: event.id,
-                  userId: m.uuid,
-                  email: m.email,
-                  role: m.role,
-                })),
-              )
-              .onConflictDoNothing();
+          for (const member of event.members) {
+            await storeMember(tx, event.id, member, false, event.timestamp);
           }
+          // Members the snapshot leaves out are removed, unless a newer event added them.
+          await tx
+            .update(spaceMembers)
+            .set({ removedAt: sql`now()`, lastEventAt: new Date(event.timestamp) })
+            .where(
+              and(
+                eq(spaceMembers.spaceId, event.id),
+                isNull(spaceMembers.removedAt),
+                notNewerThan(event.timestamp),
+                notInArray(
+                  spaceMembers.userId,
+                  event.members.map((m) => m.uuid),
+                ),
+              ),
+            );
         });
         await applied(event.id, event.timestamp);
         if (space?.provisionedAt && space.address) {
-          await matchMembers(space.address, event.members);
+          await matchMembers(space.address, await liveMembers(event.id));
         } else await provision(event.id);
       });
     },
@@ -379,7 +393,8 @@ export const createSpaceService = ({
       const event = parseEvent(spaceRenamed, body);
       await locked(event.id, async () => {
         const space = await findSpace(event.id);
-        if (space?.deletedAt || isStale(space, event.timestamp)) return;
+        if (!space) throw new NotYetKnownError(`space ${event.id} is not known yet`);
+        if (space.deletedAt || isStale(space, event.timestamp)) return;
         await db.update(spaces).set({ name: event.name }).where(eq(spaces.spaceId, event.id));
         await applied(event.id, event.timestamp);
       });
@@ -480,7 +495,14 @@ export const createSpaceService = ({
               .select({ address: spaces.address, email: spaceMembers.email })
               .from(spaceMembers)
               .innerJoin(spaces, eq(spaces.spaceId, spaceMembers.spaceId))
-              .where(and(membership, isNotNull(spaces.provisionedAt), isNull(spaces.deletedAt)));
+              .where(
+                and(
+                  membership,
+                  isNull(spaceMembers.removedAt),
+                  isNotNull(spaces.provisionedAt),
+                  isNull(spaces.deletedAt),
+                ),
+              );
             // TMail first: a failed call retries the event with the membership still stored.
             if (mailbox) await syncMember(mailbox.address, mailbox.email, undefined);
             await db.delete(spaceMembers).where(membership);

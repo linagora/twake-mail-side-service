@@ -13,7 +13,7 @@ import {
   type Mocked,
 } from 'vitest';
 import { createActivity } from '../../events/activity.js';
-import { RejectedEventError } from '../../events/errors.js';
+import { NotYetKnownError, RejectedEventError } from '../../events/errors.js';
 import { createOutboxRelay } from '../../events/outbox.js';
 import { createDbClient, type DbClient } from '../../infra/db.js';
 import { AddressTakenError, type TeamMailboxRole, type TmailClient } from '../../product/port.js';
@@ -677,10 +677,43 @@ describe('space service', () => {
     expect(await service().hasSpaces()).toBe(true);
   });
 
-  it('ignores member events of a space it does not know', async () => {
+  it('parks the member and rename events of a space it does not know yet', async () => {
     await expect(
       service().memberAdded(memberEvent(BOB, 'bob@acme.com', 'editor')),
-    ).resolves.toBeUndefined();
+    ).rejects.toBeInstanceOf(NotYetKnownError);
+    await expect(service().spaceRenamed(renamed('Sales'))).rejects.toBeInstanceOf(NotYetKnownError);
     expect(tmail.addMember).not.toHaveBeenCalled();
+  });
+
+  it('applies a member event that arrives after a newer one about another member', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+
+    await service().memberAdded(
+      memberEvent('44444444-4444-4444-8444-444444444444', 'al@acme.com', 'editor'),
+    );
+    await service().memberAdded(
+      memberEvent(
+        '55555555-5555-4555-8555-555555555555',
+        'cat@acme.com',
+        'editor',
+        '2026-10-06T10:30:00Z',
+      ),
+    );
+
+    expect(tmail.addMember).toHaveBeenCalledWith('acme.com', 'sales-eu', 'cat@acme.com', 'member');
+  });
+
+  it('does not add back a member whose newer removal came first', async () => {
+    await service().dnsValidated(validated());
+    await service().spaceCreated(created());
+
+    await service().memberRemoved(memberEvent(BOB, 'bob@acme.com', 'editor'));
+    await service().memberAdded(memberEvent(BOB, 'bob@acme.com', 'editor', '2026-10-06T10:30:00Z'));
+    await service().spaceSynced(synced('2026-10-06T10:45:00Z', created().members));
+
+    expect(await tmail.listMembers('acme.com', 'sales-eu')).not.toContainEqual(
+      expect.objectContaining({ username: 'bob@acme.com' }),
+    );
   });
 });
