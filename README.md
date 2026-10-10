@@ -9,14 +9,14 @@ npm install
 npm run test:unit         # npm test also runs the integration tests, which need Docker
 ```
 
-[Running locally](docs/running-locally.md) starts the service against Docker RabbitMQ and PostgreSQL. The service reads its configuration from the environment only; [Operations](docs/operations.md#configuration) lists every variable.
+[Running locally](docs/development.md#running-locally) starts the service against Docker RabbitMQ and PostgreSQL. The service reads its configuration from the environment only; [operations](docs/operations.md#configuration) lists every variable.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md): the systems around the service, its parts, startup, ordering and retries.
-- [Dependencies](docs/dependencies.md): what the service needs from each system it talks to, and its libraries.
-- [Events](docs/events.md): every event consumed and published.
 - [Team mailboxes](docs/team-mailboxes.md): provisioning, members, deletion, sync and mail activity.
+- [Events](docs/events.md): every event consumed and published.
 - [Data model](docs/data-model.md): tables and migrations.
-- [Operations](docs/operations.md): configuration, permissions, endpoints, metrics and repairs.
-- [Development](docs/development.md): project layout, checks, releasing.
+- [Dependencies](docs/dependencies.md): what the service needs from each system it talks to, and its libraries.
+- [Operations](docs/operations.md): configuration, permissions, probes, metrics, alerts and repairs.
+- [Development](docs/development.md): project layout, checks, running locally, releasing.
