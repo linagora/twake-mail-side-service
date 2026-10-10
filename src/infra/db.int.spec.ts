@@ -1,4 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDbClient, type DbClient } from './db.js';
 
@@ -48,5 +49,18 @@ describe('withLock', () => {
     ).rejects.toThrow('tmail down');
 
     expect(await client.withLock('space:1', async () => 'next')).toBe('next');
+  });
+
+  it("keeps the holder's error when the release fails too", async () => {
+    await expect(
+      client.withLock('space:3', async () => {
+        await client.db.execute(
+          sql`select pg_terminate_backend(pid) from pg_locks where locktype = 'advisory'`,
+        );
+        throw new Error('tmail down');
+      }),
+    ).rejects.toThrow('tmail down');
+
+    expect(await client.withLock('space:3', async () => 'next')).toBe('next');
   });
 });

@@ -9,6 +9,15 @@ export interface Consumer {
   publisher: Pick<RabbitMQClient, 'publish' | 'isConnected'>;
 }
 
+const SPACE_EVENTS = 'twake.space.#';
+
+// The client binds the dead letter queue to `<main binding>.dead`, and RabbitMQ gives every
+// message it dead-letters that key, whatever key it came with.
+export const deadLetters = (queue: string) => ({
+  exchange: `${queue}.dlx`,
+  routingKey: `${SPACE_EVENTS}.dead`,
+});
+
 export interface ConsumerDeps {
   config: Config;
   logger: Logger;
@@ -45,7 +54,7 @@ export const createConsumer = ({
       await client.init();
       await client.subscribe(
         config.RABBITMQ_SPACE_EXCHANGE,
-        'twake.space.#',
+        SPACE_EVENTS,
         config.RABBITMQ_QUEUE,
         handler,
         {
@@ -67,7 +76,7 @@ export const createConsumer = ({
               routingKey: config.RABBITMQ_MAIL_SENT_ROUTING_KEY,
             },
           ],
-          deadLetterExchange: `${config.RABBITMQ_QUEUE}.dlx`,
+          deadLetterExchange: deadLetters(config.RABBITMQ_QUEUE).exchange,
           passiveExchanges: true,
           maxRetries: config.RABBITMQ_MAX_RETRIES,
           maxRetryDelay: config.RABBITMQ_MAX_RETRY_DELAY,

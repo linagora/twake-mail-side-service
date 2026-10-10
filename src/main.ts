@@ -10,7 +10,7 @@ import { createDbClient } from './infra/db.js';
 import { createHealthServer } from './infra/health.js';
 import { logger } from './infra/logger.js';
 import { createMetrics } from './infra/metrics.js';
-import { createConsumer } from './infra/rabbitmq.js';
+import { createConsumer, deadLetters } from './infra/rabbitmq.js';
 import { createMailService, messageKey } from './modules/mail/service.js';
 import { createSpaceService } from './modules/spaces/service.js';
 import { createTmailClient } from './product/api.js';
@@ -71,9 +71,10 @@ const main = async (): Promise<void> => {
   };
   const parking = createParking({
     db: db.db,
+    tryLock: db.tryLock,
     client: consumer.publisher,
     handlers,
-    deadLetterQueue: `${config.RABBITMQ_QUEUE}.dlq`,
+    deadLetters: deadLetters(config.RABBITMQ_QUEUE),
     maxWaitMs: config.PARKING_MAX_WAIT_MS,
     logger,
   });
