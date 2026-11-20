@@ -1,5 +1,8 @@
 # twake-mail-side-service
 
+> [!WARNING]
+> This service is no longer used and the repository is archived. TMail 1.0.23 replaces it with its Twake Space extension: see the [feature](https://github.com/linagora/tmail-backend/blob/022c11c78c1af524264e8d14b89bf09348dcea54/docs/modules/ROOT/pages/tmail-backend/features/twake-space.adoc) and its [configuration](https://github.com/linagora/tmail-backend/blob/022c11c78c1af524264e8d14b89bf09348dcea54/docs/modules/ROOT/pages/tmail-backend/configure/twake-space.adoc).
+
 Gives each TwakeSpace space a TMail team mailbox, keeps its members in step with the space, and reports the mailbox's mail to the space feed.
 
 ## Quick start
